@@ -1,0 +1,206 @@
+<div class="page">
+  <header class="mb-4 flex items-center justify-between">
+    <h1 class="page-title">{{ 'me.title' | t }}</h1>
+    @if (auth.isOrganizer()) {
+      <a routerLink="/organizer" class="btn btn-sm btn-soft"><app-icon name="whistle" [size]="18" /> {{ 'nav.organizer' | t }}</a>
+    }
+  </header>
+
+  @if (player(); as p) {
+    <app-player-card [player]="p" variant="full" class="block rise" />
+
+    <!-- How the rating is made -->
+    <h2 class="section-title">{{ 'me.ratingHow' | t }}</h2>
+    <div class="card card-pad">
+      <div class="mb-3 flex flex-wrap gap-2 text-xs font-bold">
+        <span class="chip">◻ {{ 'me.fromSelf' | t }}</span>
+        <span class="chip chip-primary">■ {{ p.peer ? ('me.fromPeers' | t: { n: p.peer.raterCount }) : ('me.fromPeers' | t: { n: 0 }) }}</span>
+        <span class="chip">📈 {{ 'me.fromResults' | t }}: <b class="num">{{ p.resultsSkill }}</b></span>
+      </div>
+      @for (row of breakdown(); track row.key) {
+        <div class="mb-2.5">
+          <div class="mb-1 flex justify-between text-sm">
+            <span class="font-semibold">{{ ('attr.' + row.key) | t }}</span>
+            <b class="num">{{ row.final }}</b>
+          </div>
+          <div class="relative h-2 rounded-full" style="background: var(--bg-sunk)">
+            <div class="absolute inset-y-0 start-0 rounded-full border-2 border-dashed" style="border-color: var(--text-muted)" [style.width.%]="row.self"></div>
+            @if (row.peer !== null) {
+              <div class="absolute inset-y-0 start-0 rounded-full opacity-80" style="background: var(--primary)" [style.width.%]="row.peer"></div>
+            }
+          </div>
+        </div>
+      }
+      @if (!p.peer) { <p class="hint">🔒 {{ 'me.peersPending' | t }}</p> }
+      @if (p.adjustment) { <p class="hint">{{ 'me.adjustment' | t: { n: (p.adjustment > 0 ? '+' : '') + p.adjustment } }}</p> }
+    </div>
+
+    <!-- Punctuality -->
+    <h2 class="section-title" id="punctuality">{{ 'me.punctuality' | t }}</h2>
+    <div class="card">
+      @if (onTimeSummary(); as s) {
+        <div class="card-pad flex items-center gap-3">
+          <span class="text-2xl">⏱</span>
+          <span class="flex-1 font-bold">{{ 'me.onTimeOf' | t: { a: s.a, b: s.b } }}</span>
+          @if (p.reliability.lateDrop) { <span class="chip chip-warn">{{ 'me.lateDrops' | t: { n: p.reliability.lateDrop } }}</span> }
+        </div>
+      }
+      @for (r of attendance(); track r.matchId) {
+        <div class="row-link flex-wrap">
+          <span class="min-w-0 flex-1">
+            <span class="block truncate font-semibold">{{ r.place }}</span>
+            <span class="text-xs muted">{{ i18n.date(r.kickoff, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) }}</span>
+          </span>
+          <span class="chip" [ngClass]="r.state === 'on_time' || r.dispute.state === 'accepted' ? 'chip-primary' : r.state === 'late' ? 'chip-warn' : 'chip-danger'">
+            @switch (r.state) {
+              @case ('on_time') { {{ 'match.onTime' | t }} }
+              @case ('late') { {{ 'match.late' | t: { n: r.minutesLate } }} }
+              @case ('no_show') { {{ 'match.noShow' | t }} }
+            }
+          </span>
+          @if (r.dispute.state !== 'none') {
+            <span class="w-full text-xs font-semibold muted">{{ ('me.' + r.dispute.state) | t }}</span>
+          } @else if (r.canDispute) {
+            @if (disputing() === r.matchId) {
+              <div class="mt-2 w-full">
+                <textarea class="input" rows="2" maxlength="300" [(ngModel)]="disputeNote" [placeholder]="'me.disputeNote' | t"></textarea>
+                <div class="mt-2 grid grid-cols-2 gap-2">
+                  <button class="btn btn-sm btn-ghost" (click)="disputing.set(null)">{{ 'app.cancel' | t }}</button>
+                  <button class="btn btn-sm btn-primary" [disabled]="busy() || disputeNote.trim().length < 3" (click)="sendDispute(r.matchId)">{{ 'me.sendDispute' | t }}</button>
+                </div>
+              </div>
+            } @else {
+              <button class="btn btn-sm btn-ghost" (click)="disputing.set(r.matchId)">{{ 'me.dispute' | t }}</button>
+            }
+          }
+        </div>
+      } @empty {
+        @if (!onTimeSummary()) { <p class="card-pad text-center text-sm muted">{{ 'me.noRecord' | t }}</p> }
+      }
+    </div>
+
+    <!-- Private preferences -->
+    <h2 class="section-title">{{ 'me.prefsTitle' | t }}</h2>
+    @if (prefs(); as pr) {
+      <div class="card card-pad">
+        <p class="mb-4 flex items-start gap-2 text-sm muted"><app-icon name="lock" [size]="16" class="mt-0.5" /> {{ 'me.prefsPrivate' | t }}</p>
+        @for (list of ['with', 'avoid']; track list) {
+          @let ids = list === 'with' ? pr.with : pr.avoid;
+          @let max = list === 'with' ? pr.maxWith : pr.maxAvoid;
+          <div class="mb-1 text-sm font-bold">{{ (list === 'with' ? 'me.playWith' : 'me.avoid') | t: { n: max } }}</div>
+          <div class="mb-4 flex flex-wrap gap-2">
+            @for (id of ids; track id) {
+              <button class="chip" [ngClass]="list === 'with' ? 'chip-primary' : 'chip-warn'" (click)="togglePref($any(list), id)">{{ nameOf(id) }} ✕</button>
+            }
+            @if (ids.length < max) {
+              <button class="chip" (click)="pickerFor.set($any(list))">+ {{ 'me.pick' | t }}</button>
+            }
+          </div>
+        }
+      </div>
+    }
+
+    <!-- Profile -->
+    <h2 class="section-title">{{ 'me.profile' | t }}</h2>
+    <div class="card card-pad">
+      <div class="mb-4 flex items-center gap-4">
+        <app-avatar [url]="p.avatarUrl" [name]="p.name" [size]="4" />
+        <label class="btn btn-sm btn-ghost cursor-pointer">
+          {{ (uploading() ? 'me.uploading' : 'me.photo') | t }}
+          <input type="file" accept="image/jpeg,image/png,image/webp" class="hidden" (change)="onPhoto($event)" [disabled]="uploading()" />
+        </label>
+      </div>
+      <label class="field"><span>{{ 'auth.name' | t }}</span><input class="input" [ngModel]="name()" (ngModelChange)="name.set($event)" maxlength="40" /></label>
+      <label class="field"><span>{{ 'auth.phone' | t }}</span><input class="input" type="tel" dir="ltr" [ngModel]="phone()" (ngModelChange)="phone.set($event)" /></label>
+      <div class="field">
+        <span>{{ 'auth.position' | t }}</span>
+        <div class="seg">
+          @for (pos of positions; track pos) {
+            <button [class.on]="position() === pos" (click)="position.set(pos)">{{ ('pos.short_' + pos) | t }}</button>
+          }
+        </div>
+      </div>
+      <details class="mb-4">
+        <summary class="cursor-pointer py-2 text-sm font-bold">{{ 'me.selfRating' | t }}</summary>
+        <p class="hint mb-3">{{ 'auth.selfHint' | t }}</p>
+        <app-self-rating [(value)]="selfRating" [position]="position()" />
+      </details>
+      <button class="btn btn-primary btn-block" [disabled]="busy()" (click)="saveProfile()">{{ 'app.save' | t }}</button>
+    </div>
+
+    <!-- App -->
+    <h2 class="section-title">{{ 'me.app' | t }}</h2>
+    <div class="card">
+      <div class="row-link">
+        <span class="flex-1 font-semibold">{{ 'me.language' | t }}</span>
+        <div class="seg !p-0.5">
+          <button [class.on]="i18n.lang() === 'en'" (click)="setLang('en')">English</button>
+          <button [class.on]="i18n.lang() === 'ar'" (click)="setLang('ar')">العربية</button>
+        </div>
+      </div>
+      <div class="row-link">
+        <span class="flex-1 font-semibold">{{ 'me.theme' | t }}</span>
+        <div class="seg !p-0.5">
+          <button [class.on]="theme.theme() === 'dark'" (click)="setTheme('dark')">🌙 {{ 'me.dark' | t }}</button>
+          <button [class.on]="theme.theme() === 'light'" (click)="setTheme('light')">☀️ {{ 'me.light' | t }}</button>
+        </div>
+      </div>
+      <div class="row-link">
+        <app-icon name="bell" />
+        <span class="flex-1 font-semibold">{{ 'me.notifications' | t }}</span>
+        @switch (push.state()) {
+          @case ('unsupported') { <span class="text-xs muted">{{ 'me.notifUnsupported' | t }}</span> }
+          @case ('blocked') { <span class="text-xs muted">{{ 'me.notifBlocked' | t }}</span> }
+          @default {
+            <button class="btn btn-sm" [ngClass]="push.state() === 'on' ? 'btn-primary' : 'btn-ghost'" (click)="toggleNotifications()">
+              {{ (push.state() === 'on' ? 'me.notifOn' : 'me.notifOff') | t }}
+            </button>
+          }
+        }
+      </div>
+      @if (!pwa.installed()) {
+        <button class="row-link w-full text-start" (click)="install()">
+          <app-icon name="download" />
+          <span class="flex-1 font-semibold">{{ 'me.install' | t }}</span>
+          <app-icon name="chevron" class="muted" />
+        </button>
+      }
+    </div>
+
+    <!-- Account -->
+    <h2 class="section-title">{{ 'me.account' | t }}</h2>
+    <div class="card">
+      <button class="row-link w-full text-start" (click)="changePassword()"><app-icon name="lock" /><span class="flex-1 font-semibold">{{ 'me.changePassword' | t }}</span></button>
+      @if (!auth.isOrganizer()) {
+        <div class="row-link flex-col !items-stretch">
+          <span class="font-semibold">{{ 'me.feedback' | t }}</span>
+          <textarea class="input" rows="2" maxlength="1000" [(ngModel)]="feedbackText"></textarea>
+          <button class="btn btn-sm btn-ghost self-end" [disabled]="feedbackText.trim().length < 3" (click)="sendFeedback()">{{ 'app.share' | t }}</button>
+        </div>
+      }
+      <button class="row-link w-full text-start" (click)="auth.logout()"><app-icon name="back" /><span class="flex-1 font-semibold">{{ 'me.logout' | t }}</span></button>
+      @if (!auth.isOrganizer()) {
+        <button class="row-link w-full text-start" style="color: var(--danger)" (click)="deleteAccount()"><app-icon name="trash" /><span class="flex-1 font-semibold">{{ 'me.deleteAccount' | t }}</span></button>
+      }
+    </div>
+  }
+</div>
+
+<!-- Player picker for preferences -->
+@if (pickerFor(); as list) {
+  <div class="sheet-backdrop" (click)="pickerFor.set(null)">
+    <div class="sheet" (click)="$event.stopPropagation()">
+      <div class="sheet-handle"></div>
+      <h2 class="mb-1 text-lg font-black">{{ (list === 'with' ? 'me.playWith' : 'me.avoid') | t: { n: list === 'with' ? prefs()!.maxWith : prefs()!.maxAvoid } }}</h2>
+      <p class="mb-3 flex items-center gap-1.5 text-xs muted"><app-icon name="lock" [size]="14" /> {{ 'me.prefsPrivate' | t }}</p>
+      @for (o of others(); track o._id) {
+        @let chosen = prefs()![list].includes(o._id);
+        <button class="row-link w-full text-start" (click)="togglePref(list, o._id); pickerFor.set(null)">
+          <app-avatar [url]="o.avatarUrl" [name]="o.name" [size]="2.25" />
+          <span class="flex-1 font-semibold">{{ o.name }}</span>
+          @if (chosen) { <app-icon name="check" class="text-emerald-500" /> }
+        </button>
+      }
+    </div>
+  </div>
+}

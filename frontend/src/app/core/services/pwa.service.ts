@@ -1,49 +1,36 @@
 import { Injectable, signal } from '@angular/core';
 
-@Injectable({
-  providedIn: 'root'
-})
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
+/** "Install app" support. On iPhone there is no prompt, so the Me screen shows instructions instead. */
+@Injectable({ providedIn: 'root' })
 export class PwaService {
-  private deferredPrompt: any;
-  // Always show by default so iOS/Desktop users can see the fallback instructions
-  showInstallButton = signal(true);
+  private deferred: BeforeInstallPromptEvent | null = null;
+  readonly installed = signal(window.matchMedia?.('(display-mode: standalone)').matches ?? false);
+  readonly canPrompt = signal(false);
 
   constructor() {
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
-      this.deferredPrompt = e;
-      this.showInstallButton.set(true);
+      this.deferred = e as BeforeInstallPromptEvent;
+      this.canPrompt.set(true);
     });
-
     window.addEventListener('appinstalled', () => {
-      this.showInstallButton.set(false);
-      this.deferredPrompt = null;
-      console.log('PWA was installed');
+      this.installed.set(true);
+      this.canPrompt.set(false);
+      this.deferred = null;
     });
-
-    // Hide button if already installed (running in standalone mode)
-    if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) {
-      this.showInstallButton.set(false);
-    }
   }
 
-  installPwa() {
-    if (!this.deferredPrompt) {
-      // Fallback instructions for iOS Safari or browsers blocking the prompt
-      alert('📥 How to Install:\n\n📱 iOS (Safari): Tap the Share button at the bottom and select "Add to Home Screen".\n\n🤖 Android / Desktop: Look for the Install icon in your address bar, or use "Install App" in your browser menu.');
-      return;
-    }
-
-    // Show the native prompt
-    this.deferredPrompt.prompt();
-    
-    // Wait for the user to respond
-    this.deferredPrompt.userChoice.then((choiceResult: { outcome: string }) => {
-      if (choiceResult.outcome === 'accepted') {
-        console.log('User accepted the A2HS prompt');
-        this.showInstallButton.set(false);
-      }
-      this.deferredPrompt = null;
-    });
+  async install(): Promise<boolean> {
+    if (!this.deferred) return false;
+    await this.deferred.prompt();
+    const { outcome } = await this.deferred.userChoice;
+    this.deferred = null;
+    this.canPrompt.set(false);
+    return outcome === 'accepted';
   }
 }

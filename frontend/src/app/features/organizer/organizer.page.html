@@ -1,0 +1,172 @@
+<div class="page">
+  <header class="mb-4 flex items-center justify-between">
+    <h1 class="page-title">{{ 'org.title' | t }}</h1>
+    <a routerLink="/me" class="btn btn-sm btn-ghost"><app-icon name="user" [size]="18" /> {{ 'nav.me' | t }}</a>
+  </header>
+
+  @if (!data()) {
+    <div class="skeleton h-40"></div>
+    <div class="skeleton mt-4 h-72"></div>
+  }
+
+  @if (data(); as d) {
+    <!-- Invite link -->
+    <h2 class="section-title !mt-0">{{ 'org.invite' | t }}</h2>
+    <div class="card card-pad">
+      <div class="sunk mb-3 truncate px-3 py-2.5 font-mono text-xs" dir="ltr">{{ inviteLink() }}</div>
+      <div class="grid grid-cols-3 gap-2">
+        <button class="btn btn-sm btn-ghost" (click)="copyInvite()"><app-icon name="copy" [size]="16" /> {{ 'app.copy' | t }}</button>
+        <button class="btn btn-sm btn-primary" (click)="shareInvite()"><app-icon name="share" [size]="16" /> {{ 'app.share' | t }}</button>
+        <button class="btn btn-sm btn-danger" (click)="resetInvite()"><app-icon name="refresh" [size]="16" /> {{ 'org.resetInvite' | t }}</button>
+      </div>
+      <p class="hint">{{ 'org.inviteHint' | t }}</p>
+    </div>
+
+    <!-- Punctuality requests -->
+    <h2 class="section-title">{{ 'org.requests' | t }} @if (d.disputes.length) { <span class="chip chip-warn ms-1">{{ d.disputes.length }}</span> }</h2>
+    <div class="card">
+      @for (r of d.disputes; track r.matchId + r.playerId) {
+        <div class="card-pad" [class.divider]="!$first">
+          <div class="flex items-center justify-between gap-2">
+            <span class="font-bold">{{ memberName(r.playerId) }}</span>
+            <span class="chip chip-warn">{{ r.state === 'late' ? ('match.late' | t: { n: r.minutesLate }) : ('match.noShow' | t) }}</span>
+          </div>
+          <div class="text-xs muted">{{ r.place }} · {{ i18n.date(r.kickoff, { day: 'numeric', month: 'short' }) }}</div>
+          <p class="sunk mt-2 px-3 py-2 text-sm">“{{ r.note }}”</p>
+          <div class="mt-2 grid grid-cols-2 gap-2">
+            <button class="btn btn-sm btn-ghost" (click)="decide(r.matchId, r.playerId, 'reject')">{{ 'org.reject' | t }}</button>
+            <button class="btn btn-sm btn-primary" (click)="decide(r.matchId, r.playerId, 'accept')">{{ 'org.accept' | t }}</button>
+          </div>
+        </div>
+      } @empty {
+        <p class="card-pad text-center text-sm muted">{{ 'org.noRequests' | t }}</p>
+      }
+    </div>
+
+    <!-- Money -->
+    <h2 class="section-title">{{ 'org.unpaid' | t }}</h2>
+    <div class="card">
+      @for (u of d.unpaid; track u.playerId) {
+        <div class="row-link">
+          <span class="min-w-0 flex-1">
+            <span class="block truncate font-bold">{{ memberName(u.playerId) }}</span>
+            <span class="text-xs muted">{{ u.matches.length }} × {{ 'nav.matches' | t }}</span>
+          </span>
+          <span class="font-black num" style="color: var(--danger)">{{ i18n.money(u.amount, d.settings.currency) }}</span>
+        </div>
+      } @empty {
+        <p class="card-pad text-center text-sm muted">✅ {{ 'org.noUnpaid' | t }}</p>
+      }
+    </div>
+
+    <!-- Members -->
+    <h2 class="section-title">{{ 'org.members' | t: { n: d.members.length } }}</h2>
+    <div class="card">
+      @for (m of d.members; track m._id) {
+        <div [class.divider]="!$first">
+          <button class="row-link w-full text-start" (click)="toggle(m)">
+            <app-avatar [url]="m.avatarUrl" [name]="m.name" [size]="2.5" />
+            <span class="min-w-0 flex-1">
+              <span class="flex items-center gap-1.5">
+                <span class="truncate font-bold">{{ m.name }}</span>
+                @if (m.role === 'organizer') { <span class="chip !py-0 text-[10px]">👑</span> }
+                @if (m.concernFlag) { <span class="chip chip-danger !py-0 text-[10px]" [title]="'org.concern' | t">⚠</span> }
+              </span>
+              <span class="text-xs muted">{{ ('pos.short_' + m.position) | t }} · {{ m.overall }}
+                @if (m.adjustment) { · <b>{{ m.adjustment > 0 ? '+' : '' }}{{ m.adjustment }}</b> }
+              </span>
+            </span>
+            <app-icon name="chevron" class="muted transition-transform" [class.rotate-90]="open() === m._id" />
+          </button>
+
+          @if (open() === m._id) {
+            <div class="px-4 pb-4 rise">
+              @if (m.concernFlag) {
+                <p class="chip chip-danger mb-3 !whitespace-normal !rounded-xl !py-2">⚠ {{ 'org.concern' | t }}</p>
+              }
+
+              <!-- Contact -->
+              <div class="mb-4 grid grid-cols-3 gap-2">
+                @if (m.contact.phone) {
+                  <a class="btn btn-sm btn-ghost" [href]="'tel:' + m.contact.phone"><app-icon name="phone" [size]="16" /> {{ 'org.call' | t }}</a>
+                  <a class="btn btn-sm btn-soft" [href]="wa(m.contact.phone)" target="_blank" rel="noopener">💬 {{ 'org.whatsapp' | t }}</a>
+                } @else {
+                  <span class="col-span-2 self-center text-xs muted">{{ 'org.noPhone' | t }}</span>
+                }
+                <a class="btn btn-sm btn-ghost" [href]="'mailto:' + m.contact.email"><app-icon name="mail" [size]="16" /></a>
+              </div>
+
+              <!-- Punctuality -->
+              <div class="mb-4 grid grid-cols-4 gap-2 text-center">
+                <div class="sunk py-2"><div class="font-black num">{{ m.reliability.onTime }}</div><div class="text-[10px] muted">{{ 'match.onTime' | t }}</div></div>
+                <div class="sunk py-2"><div class="font-black num text-amber-500">{{ m.reliability.late }}</div><div class="text-[10px] muted">⏱</div></div>
+                <div class="sunk py-2"><div class="font-black num text-rose-500">{{ m.reliability.noShow }}</div><div class="text-[10px] muted">{{ 'match.noShow' | t }}</div></div>
+                <div class="sunk py-2"><div class="font-black num">{{ m.reliability.lateDrop }}</div><div class="text-[10px] muted">↩</div></div>
+              </div>
+
+              <!-- Adjustment -->
+              <div class="sunk p-3">
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-bold">{{ 'org.adjust' | t }}</span>
+                  <b class="text-lg num" [ngClass]="adjValue() > 0 ? 'text-emerald-500' : adjValue() < 0 ? 'text-rose-500' : ''">{{ adjValue() > 0 ? '+' : '' }}{{ adjValue() }}</b>
+                </div>
+                <input type="range" min="-5" max="5" step="1" class="mt-2 w-full accent-emerald-500" dir="ltr"
+                       [ngModel]="adjValue()" (ngModelChange)="adjValue.set(+$event)" />
+                @if (adjValue() !== 0) {
+                  <div class="mt-2 flex flex-col gap-1.5">
+                    @for (r of reasons; track r) {
+                      <label class="flex items-center gap-2 text-sm">
+                        <input type="radio" [name]="'reason-' + m._id" [checked]="adjReason() === r" (change)="adjReason.set(r)" class="h-4 w-4 accent-emerald-500" />
+                        {{ ('org.reasons.' + r) | t }}
+                      </label>
+                    }
+                  </div>
+                }
+                <p class="hint">{{ 'org.adjustHint' | t }}</p>
+                <button class="btn btn-sm btn-primary btn-block mt-2" [disabled]="busy() || (adjValue() !== 0 && !adjReason()) || (adjValue() === m.adjustment && adjReason() === m.adjustmentReason)"
+                        (click)="saveAdjustment(m)">{{ 'app.save' | t }}</button>
+                @if (m.adjustmentLog.length) {
+                  <div class="mt-3 text-xs font-bold muted">{{ 'org.history' | t }}</div>
+                  @for (l of m.adjustmentLog; track $index) {
+                    <div class="text-xs muted">{{ i18n.date(l.at, { day: 'numeric', month: 'short' }) }} · <b>{{ l.value > 0 ? '+' : '' }}{{ l.value }}</b> @if (l.reason) { · {{ ('org.reasons.' + l.reason) | t }} }</div>
+                  }
+                }
+              </div>
+
+              @if (m.role !== 'organizer') {
+                <button class="btn btn-sm btn-danger btn-block mt-3" (click)="remove(m)">{{ 'org.removeMember' | t }}</button>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+
+    <!-- Settings -->
+    <h2 class="section-title">{{ 'org.settings' | t }}</h2>
+    <form class="card card-pad" (ngSubmit)="saveSettings()">
+      <label class="field"><span>{{ 'org.groupName' | t }}</span><input class="input" name="groupName" [(ngModel)]="settings.groupName" maxlength="40" /></label>
+      <div class="grid grid-cols-2 gap-3">
+        <label class="field"><span>{{ 'org.defaultCapacity' | t }}</span><input class="input num" type="number" name="cap" min="2" max="22" [(ngModel)]="settings.defaultCapacity" /></label>
+        <label class="field"><span>{{ 'org.grace' | t }}</span><input class="input num" type="number" name="grace" min="0" max="30" [(ngModel)]="settings.lateGraceMinutes" /></label>
+        <label class="field"><span>{{ 'org.defaultPrice' | t }}</span><input class="input num" type="number" name="price" min="0" [(ngModel)]="settings.defaultPrice" /></label>
+        <label class="field"><span>{{ 'org.currency' | t }}</span><input class="input" name="currency" maxlength="5" [(ngModel)]="settings.currency" /></label>
+      </div>
+      <label class="field"><span>{{ 'org.ratingWindow' | t }}</span><input class="input num" type="number" name="window" min="12" max="168" [(ngModel)]="settings.ratingWindowHours" /></label>
+      <button class="btn btn-primary btn-block" [disabled]="busy()">{{ 'app.save' | t }}</button>
+    </form>
+
+    <!-- Feedback -->
+    <h2 class="section-title">{{ 'org.feedback' | t }}</h2>
+    <div class="card">
+      @for (f of d.feedback; track f._id) {
+        <div class="card-pad" [class.divider]="!$first">
+          <div class="text-xs font-bold muted">{{ f.name }} · {{ i18n.date(f.at, { day: 'numeric', month: 'short' }) }}</div>
+          <p class="mt-1 text-sm">{{ f.message }}</p>
+        </div>
+      } @empty {
+        <p class="card-pad text-center text-sm muted">{{ 'org.noFeedback' | t }}</p>
+      }
+    </div>
+  }
+</div>

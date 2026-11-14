@@ -1,231 +1,82 @@
-# ⚽ Five-a-Side Manager
+# ⚽ 5-a-side
 
-A full-stack web application for organizing 5-a-side football matches. Manage your squad, generate AI-balanced teams, track player stats, and get AI-powered insights — all in one place.
+A phone-first app for one friends' football group. Players join with an invite link and look after their own profile. The app collects replies, makes fair teams and keeps everyone's rating honest, so the organizer doesn't have to.
 
-**Live:** [five-a-side-manager-frontend.vercel.app](https://five-a-side-manager-frontend.vercel.app) &nbsp;|&nbsp; **API:** Hosted on [Render](https://render.com)
+## How it works
 
----
+**Joining.** The organizer shares an invite link (Organizer → Invite link). Players sign up, pick a position, rate themselves honestly and agree to share their phone number with the organizer only.
 
-## ✨ Features
+**Ratings nobody can game.** Each player's overall comes from three sources:
 
-| Feature | Description |
+| Source | How it's used |
 |---|---|
-| 🔐 **Auth** | JWT access tokens + HTTP-only refresh token cookies with rotation |
-| 👥 **Player Management** | Add players with 10 attributes, auto-calculated overall rating (1–99) |
-| 📸 **Player Avatars** | Upload player photos stored on Cloudinary |
-| ⚽ **Match Management** | Schedule matches, build rosters, generate balanced teams |
-| 🤖 **AI Team Balancer** | Position-aware algorithm splits teams by overall rating |
-| 🧠 **AI Player Report** | Gemini generates a natural-language performance summary per player |
-| 🏆 **AI MVP Suggestion** | Gemini suggests the MVP when no one is manually flagged |
-| 📅 **AI Conflict Detector** | Detects scheduling conflicts and suggests alternative time slots |
-| 📊 **Stats Leaderboard** | Goals, assists, MVP counts aggregated across all completed matches |
-| 🔥 **Performance Trends** | Players automatically tagged as `hot`, `stable`, or `cold` |
-| 📧 **Email Notifications** | Match confirmation emails sent to the manager via Resend |
-| 🔒 **Security** | Rate limiting, helmet, CORS, bcrypt passwords, security-question password reset |
-| 📱 **PWA** | Offline support via Dexie.js, installable on mobile |
-| 🌓 **Dual Theme** | Midnight Blue (dark) + Pitch Green (light) — persists across sessions |
+| Self-rating | Starting point only. Pulled halfway to average, and fades out as teammates rate you. |
+| Teammates | After each match, everyone rates 4 random people they played with (1–5 taps). Trimmed, weighted averages ignore revenge ratings and friends inflating friends. Shown to the player once 4+ different people have rated them. |
+| Results (Elo) | Wins, losses and goal difference. Can't be faked. Its weight grows over the first 5 matches. |
 
----
+The visible overall moves at most 3 points per update. The organizer can add a small, recorded correction (−5 to +5, with a reason) that fades over 5 matches.
 
-## 🏗️ Architecture
+**Punctuality.** The organizer taps "Arrived" at the pitch, and the time is saved. Players see their own record and can tap "This is wrong" within 48 hours; the organizer accepts or rejects it. Other players never see anyone's punctuality.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      Render (Backend)                        │
-│  Express.js + MongoDB Atlas + Gemini AI + Cloudinary        │
-│                                                              │
-│  /api/auth    /api/players    /api/matches                   │
-│  /api/stats   /api/feedback   /api/admin   /api/notes        │
-└──────────────────────────┬──────────────────────────────────┘
-                           │ REST API (HTTPS)
-┌──────────────────────────▼──────────────────────────────────┐
-│                   Vercel (Frontend)                          │
-│   Angular 21 PWA  ·  Tailwind CSS  ·  Dexie.js (offline)   │
-└─────────────────────────────────────────────────────────────┘
-```
+**Behaviour, privately.** After each match: "Happy to play with them again? 👍/👎". Only a pattern from 3+ different people raises a quiet flag for the organizer. Nobody sees individual answers.
 
----
+**Who plays with whom.** Each player privately picks up to 3 people they enjoy playing with and up to 2 they'd rather not be teamed with. Only the team-maker reads these. The organizer sees only "8/10 wishes met".
 
-## 🛠️ Tech Stack
+**Fair teams.** The team-maker tries every possible split (126 for 10 players) and weighs: equal strength, keepers on different sides, defenders and forwards spread out, wishes, and not the same teammates every week. It offers 3 options. The organizer can swap players on the pitch, then publish and share to WhatsApp as an image.
 
-| Layer | Technology |
-|---|---|
-| **Frontend** | Angular 21, Tailwind CSS 3, Dexie.js, html-to-image |
-| **Backend** | Node.js, Express 5, Mongoose 9 |
-| **Database** | MongoDB Atlas |
-| **Auth** | JWT (access 15m) + HTTP-only refresh token (7d) with rotation |
-| **AI** | Google Gemini 2.0 Flash (`@google/generative-ai`) |
-| **File Storage** | Cloudinary (player avatars) |
-| **Email** | Resend SDK |
-| **Testing** | Jest + Supertest + mongodb-memory-server (backend) · Jasmine/Karma (frontend) |
-| **Deployment** | Render (backend + frontend unified) |
+**Everything else.** In / Out / Maybe replies with an automatic waitlist, reminders, "Add to calendar", weather at kick-off, cost tracking (who has paid), Player of the Week/Month voting, push notifications, English and Arabic (right-to-left), dark and light themes, and installation as a phone app.
 
----
+## Privacy rules (enforced on the server, in `backend/services/views.js`)
 
-## 🚀 Local Development Setup
+- **Everyone sees:** name, photo, position, overall, attributes, stats, form, positive badges.
+- **A player also sees:** their own self-rating, teammate breakdown (once 4+ raters), punctuality, adjustment value.
+- **The organizer also sees:** contact details, punctuality, the concern flag, the adjustment reason and history.
+- **Nobody ever sees:** who rated whom, MVP votes, "play again" answers, play-with / prefer-not picks.
 
-### Prerequisites
-- Node.js 20+
-- npm 10+
-- MongoDB Atlas account (free tier works)
+## Running it locally
 
-### 1. Clone the repo
 ```bash
-git clone https://github.com/YOUR_USERNAME/five-a-side-manager-backend.git
-cd five-a-side-manager-backend
+cd backend && npm install
+cd ../frontend && npm install && npm run build
+cd ../backend && npm run demo
 ```
 
-### 2. Backend setup
+`npm run demo` starts the app at http://localhost:3000 on a **temporary in-memory database** with a sample group, so it never touches your real data. Logins: `organizer@demo.test` / `demo1234`, or a player such as `omar@demo.test` / `demo1234`.
+
+Tests (74, including a full match-week run through the API):
+
 ```bash
-cd backend
-cp .env.example .env
-# Edit .env with your actual values
-npm install
-npm run dev
-```
-Server starts at `http://localhost:3000`
-
-### 3. Frontend setup (separate terminal)
-```bash
-cd frontend
-npm install --legacy-peer-deps
-npm start
-```
-App opens at `http://localhost:4200`
-
----
-
-## 🔧 Environment Variables
-
-See [`backend/.env.example`](./backend/.env.example) for the full reference. Key variables:
-
-| Variable | Required | Description |
-|---|---|---|
-| `MONGO_URI` | ✅ | MongoDB Atlas connection string |
-| `JWT_SECRET` | ✅ | 32-char random string for access tokens |
-| `REFRESH_TOKEN_SECRET` | ✅ | 32-char random string for refresh tokens |
-| `NODE_ENV` | ✅ | Set to `production` on Render |
-| `GEMINI_API_KEY` | Optional | Enables AI features (2, 3, 4) |
-| `CLOUDINARY_CLOUD_NAME` | Optional | Enables player avatar uploads |
-| `CLOUDINARY_API_KEY` | Optional | Cloudinary auth |
-| `CLOUDINARY_API_SECRET` | Optional | Cloudinary auth |
-| `RESEND_API_KEY` | Optional | Enables match creation emails |
-| `EMAIL_FROM` | Optional | Verified sender address |
-| `ADMIN_EMAIL` | Seed only | Used by `npm run seed-admin` |
-| `ADMIN_PASSWORD` | Seed only | Used by `npm run seed-admin` |
-
-**Generate secrets:**
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+cd backend && npm test
 ```
 
----
+## Deploying (Render)
 
-## 📡 API Reference
+1. Set the environment variables listed in [backend/.env.example](backend/.env.example). New in this version:
+   - `ORGANIZER_EMAIL`: your email. Sign up at `/join/organizer` with it to create the organizer account.
+   - `JWT_SECRET`, `REFRESH_TOKEN_SECRET`: at least 32 random characters each. The server refuses to start without them.
+   - `CRON_SECRET`, plus a free scheduler (for example cron-job.org) calling `POST /api/cron/tick` every 15–30 minutes with the header `x-cron-secret`. This sends reminders and closes rating rounds.
+   - `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY`: for phone notifications (`npx web-push generate-vapid-keys`).
+   - `GMAIL_USER` / `GMAIL_APP_PASSWORD`: for password reset codes.
+2. Old data does not fit the new structure. To wipe it, run this from `backend/` with `MONGO_URI` set:
+   ```bash
+   node scripts/resetData.js
+   ```
+   This only shows counts. Add `--yes` to actually delete. **Deleted data cannot be recovered.**
+3. Deploy, then open `/join/organizer` and sign up with `ORGANIZER_EMAIL`.
 
-All routes require `Authorization: Bearer <accessToken>` unless marked **Public**.
+## Structure
 
-### Auth — `/api/auth`
-| Method | Route | Access | Description |
-|---|---|---|---|
-| POST | `/register` | Public | Register new user |
-| POST | `/login` | Public | Login, returns access token |
-| POST | `/refresh` | Public | Rotate refresh token |
-| POST | `/logout` | Private | Clear refresh token |
-| PUT | `/profile` | Private | Update name/password |
-| POST | `/security-question` | Public | Get user's security question |
-| POST | `/verify-security-answer` | Public | Verify answer, get reset token |
-| POST | `/reset-password` | Public | Reset password with token |
-
-### Players — `/api/players`
-| Method | Route | Description |
-|---|---|---|
-| GET | `/` | Get all players |
-| POST | `/` | Create player |
-| PUT | `/:id` | Update player |
-| DELETE | `/:id` | Delete player |
-| POST | `/:id/avatar` | Upload avatar (multipart/form-data) |
-| GET | `/:id/ai-report` | Get Gemini AI performance report |
-
-### Matches — `/api/matches`
-| Method | Route | Description |
-|---|---|---|
-| GET | `/` | Get all matches |
-| POST | `/` | Create match (includes conflict check) |
-| GET | `/:id` | Get single match |
-| PUT | `/:id` | Update match |
-| DELETE | `/:id` | Delete match |
-| POST | `/:id/generate` | Generate balanced teams |
-| POST | `/:id/complete` | Complete match + update stats |
-
-### Stats — `/api/stats`
-| Method | Route | Description |
-|---|---|---|
-| GET | `/leaderboard` | Goals/assists/MVP leaderboard |
-| GET | `/summary` | Dashboard overview (counts, top scorer, hot players) |
-
-### Admin — `/api/admin` *(Admin only)*
-| Method | Route | Description |
-|---|---|---|
-| GET | `/users` | List all users |
-| GET | `/stats` | System-wide stats |
-| GET | `/feedback` | All user feedback |
-
----
-
-## 🧪 Running Tests
-
-### Backend (Jest)
-```bash
-cd backend
-npm test
 ```
-
-Tests are in `backend/tests/`:
-- `authController.test.js` — register, login, token flow
-- `playerController.test.js` — CRUD, auth guards
-- `matchController.test.js` — create, complete, generate teams
-- `balancingService.test.js` — team balancing algorithm
-
-### Frontend (Jasmine/Karma)
-```bash
-cd frontend
-npm test -- --watch=false
+backend/
+  models/        User, Player, Match, PeerRating, Preference, Settings, Poll, Feedback
+  services/      ratingService (rating maths), balancingService (team-maker),
+                 standingsService (recomputes everyone from match history),
+                 matchService (replies, waitlist, results, rating rounds), views (privacy), push, email
+  controllers/   auth, me, matches, organizer, polls, cron
+  routes/index.js   every route and who may call it, in one file
+  tests/         unit tests + end-to-end API test
+frontend/src/app/
+  core/          API client, login session, translations (en/ar), theme, models
+  shared/ui/     pitch, player card, reply card, icons, pop-ups
+  features/      home, matches, match, rate, squad, vote, me, organizer, auth
 ```
-
----
-
-## 🚢 Deploying to Render
-
-1. Push your code to GitHub.
-2. Go to [render.com](https://render.com) → **New Web Service** → connect your repo.
-3. Set the **Root Directory** to `./` (the project root, not `/backend`).
-4. Set **Build Command**: `cd backend && npm install && cd ../frontend && npm install --legacy-peer-deps && npm run build`
-5. Set **Start Command**: `cd backend && npm start`
-6. Add all environment variables from `.env.example` in the Render dashboard.
-7. Click **Deploy**.
-
-> **MongoDB Atlas Network Access:** Add `0.0.0.0/0` or Render's static IPs to Atlas → Network Access.
-
-### Seed the Admin User
-After first deploy, run from your local machine (with your production `.env`):
-```bash
-cd backend
-npm run seed-admin
-```
-
----
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/my-feature`
-3. Commit your changes: `git commit -m 'feat: add my feature'`
-4. Push to the branch: `git push origin feature/my-feature`
-5. Open a Pull Request
-
----
-
-## 📄 License
-
-ISC License — see [LICENSE](./LICENSE) for details.

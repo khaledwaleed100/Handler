@@ -10,7 +10,7 @@ export interface PollCandidate {
   name: string;
   position: 'GK' | 'DEF' | 'MID' | 'FWD';
   avatarUrl: string | null;
-  overallRating?: number;
+  overall?: number;
   avgRating: number;
   goals: number;
   assists: number;
@@ -26,7 +26,7 @@ export interface Poll {
   isActive: boolean;
   createdAt: string;
   closedAt: string | null;
-  isOwner: boolean;
+  canManage: boolean;
   hasVoted: boolean;
   myVote: string | null;
   totalVotes: number;
@@ -39,12 +39,12 @@ export interface PollTypeStatus {
   completed: number;
   pending: number;
   canGenerate: boolean;
-  /** Admin-only: poll can be opened early with fewer matches than required. */
+  /** Organizer only: poll can be opened early with fewer matches than required. */
   canForce?: boolean;
   activePollId: string | null;
 }
 
-export type PollStatus = Record<PollType, PollTypeStatus> & { isAdmin?: boolean };
+export type PollStatus = Record<PollType, PollTypeStatus> & { canManage?: boolean };
 
 /** Short-poll cadence. Kept gentle: phones on mobile data, free-tier server. */
 const LIVE_INTERVAL_MS = 20_000;

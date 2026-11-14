@@ -1,0 +1,306 @@
+<div class="page">
+  <header class="mb-4 flex items-center gap-2">
+    <a routerLink="/matches" class="icon-btn" [attr.aria-label]="'app.back' | t"><app-icon name="back" /></a>
+    <h1 class="min-w-0 flex-1 truncate text-lg font-black">{{ match()?.place }}</h1>
+    @if (isOrg() && match(); as m) {
+      @if (m.status === 'upcoming') {
+        <button class="icon-btn" (click)="cancelMatch()" [attr.aria-label]="'match.cancelMatch' | t"><app-icon name="x" /></button>
+      }
+      <button class="icon-btn" (click)="deleteMatch()" [attr.aria-label]="'match.deleteMatch' | t"><app-icon name="trash" /></button>
+    }
+  </header>
+
+  @if (loading() && !match()) {
+    <div class="skeleton h-64"></div>
+    <div class="skeleton mt-4 h-96"></div>
+  }
+
+  @if (match(); as m) {
+    <!-- ── Cancelled ─────────────────────────────── -->
+    @if (m.status === 'cancelled') {
+      <div class="card card-pad text-center">
+        <span class="chip chip-danger">{{ 'match.cancelled' | t }}</span>
+        <p class="mt-2 font-bold">{{ i18n.date(m.kickoff, { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) }}</p>
+      </div>
+    }
+
+    <!-- ── Upcoming: reply card ──────────────────── -->
+    @if (m.status === 'upcoming') {
+      <app-rsvp-card [match]="m" [currency]="currency()" [showLink]="false" (changed)="match.set($event)" />
+    }
+
+    <!-- ── Completed: scoreboard ─────────────────── -->
+    @if (m.status === 'completed' && m.score) {
+      <div class="card overflow-hidden">
+        <div class="p-5 text-center text-white" style="background: linear-gradient(135deg, #0f172a, #1e293b)">
+          <div class="text-xs font-bold uppercase tracking-wider opacity-70">{{ 'match.completed' | t }} · {{ i18n.date(m.kickoff, { day: 'numeric', month: 'short' }) }}</div>
+          <div class="mt-2 flex items-center justify-center gap-5" dir="ltr">
+            <div class="flex-1 text-end"><div class="text-xs font-bold" style="color: var(--team-a)">{{ 'match.teamA' | t }}</div></div>
+            <div class="text-5xl font-black num pop">{{ m.score.a }}<span class="mx-2 opacity-50">–</span>{{ m.score.b }}</div>
+            <div class="flex-1 text-start"><div class="text-xs font-bold" style="color: var(--team-b)">{{ 'match.teamB' | t }}</div></div>
+          </div>
+          @if (m.mvp) {
+            <div class="mt-3 inline-flex items-center gap-2 rounded-full bg-amber-400/20 px-3 py-1 text-sm font-bold text-amber-300">👑 {{ 'match.mvp' | t }}: {{ name(m.mvp) }}</div>
+          }
+        </div>
+        @if (m.ratings; as r) {
+          <div class="p-4">
+            @if (r.myTaskPending) {
+              <a class="btn btn-primary btn-block" [routerLink]="['/matches', m._id, 'rate']">⭐ {{ 'match.rateNow' | t }}</a>
+            } @else if (!r.finalized) {
+              <p class="text-center text-sm font-semibold muted">{{ 'match.ratedThanks' | t }}</p>
+            }
+            <div class="mt-3 flex items-center justify-between text-xs font-bold muted">
+              <span>{{ r.finalized ? ('match.ratingsClosed' | t) : ('match.ratingProgress' | t: { done: r.done, total: r.total }) }}</span>
+              @if (isOrg() && !r.finalized) {
+                <button class="btn btn-sm btn-ghost" [disabled]="busy()" (click)="closeRatings()">{{ 'match.closeRatings' | t }}</button>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    }
+
+    <!-- ── My punctuality / payment notes ────────── -->
+    @if (m.myAttendance; as a) {
+      @if (a.state !== 'on_time') {
+        <a routerLink="/me" [fragment]="'punctuality'" class="card card-pad mt-3 flex items-center gap-3 text-sm">
+          <span class="text-xl">⏱</span>
+          <span class="flex-1 font-semibold">
+            {{ a.state === 'late' ? ('match.youWereLate' | t: { n: a.minutesLate }) : ('match.youNoShow' | t) }}
+            @if (a.dispute.state !== 'none') { · {{ ('me.' + a.dispute.state) | t }} }
+          </span>
+          @if (a.dispute.state === 'none') { <span class="chip">{{ 'me.dispute' | t }}</span> }
+        </a>
+      }
+    }
+
+    <!-- ── The pitch (published teams, members' view) ── -->
+    @if (!isOrg() && m.status !== 'cancelled') {
+      @if (m.teamsPublished && (m.teamA.length || m.teamB.length)) {
+        <div class="mt-5"><app-pitch [teamA]="m.teamA" [teamB]="m.teamB" [players]="players()" [stats]="m.stats" [mvp]="m.mvp" [showStrength]="m.status === 'upcoming'" /></div>
+      } @else if (m.status === 'upcoming') {
+        <p class="card card-pad mt-4 text-center text-sm muted">👕 {{ 'match.teamsHidden' | t }}</p>
+      }
+    }
+
+    <!-- ── Members' view: who's coming ───────────── -->
+    @if (!isOrg() && m.status === 'upcoming') {
+      <ng-container [ngTemplateOutlet]="rsvpLists" [ngTemplateOutletContext]="{ m: m, editable: false }" />
+    }
+
+    <!-- ── Organizer tools ───────────────────────── -->
+    @if (isOrg() && m.status !== 'cancelled') {
+      <div class="seg mt-5">
+        @for (t of tabs(); track t) {
+          <button [class.on]="tab() === t" (click)="tab.set(t)">
+            {{ ('match.tab' + (t === 'players' ? 'Players' : t === 'teams' ? 'Teams' : t === 'checkin' ? 'Checkin' : t === 'result' ? 'Result' : 'Money')) | t }}
+          </button>
+        }
+      </div>
+
+      <div class="mt-4">
+        @switch (tab()) {
+
+          <!-- Players -->
+          @case ('players') {
+            <ng-container [ngTemplateOutlet]="rsvpLists" [ngTemplateOutletContext]="{ m: m, editable: true }" />
+            @if (unanswered().length) {
+              <div class="section-title">{{ 'match.addPlayer' | t }}</div>
+              <div class="card card-pad">
+                <select class="input" [(ngModel)]="addPick">
+                  <option value="">{{ 'match.setStatus' | t }}…</option>
+                  @for (p of unanswered(); track p._id) { <option [value]="p._id">{{ p.name }}</option> }
+                </select>
+                <div class="mt-2 grid grid-cols-3 gap-2">
+                  <button class="btn btn-sm btn-primary" [disabled]="!addPick || busy()" (click)="addPlayer('in')">{{ 'home.in' | t }}</button>
+                  <button class="btn btn-sm btn-soft" [disabled]="!addPick || busy()" (click)="addPlayer('maybe')">{{ 'home.maybe' | t }}</button>
+                  <button class="btn btn-sm btn-danger" [disabled]="!addPick || busy()" (click)="addPlayer('out')">{{ 'home.out' | t }}</button>
+                </div>
+              </div>
+            }
+            <button class="btn btn-soft btn-block mt-4" (click)="shareInvite()"><app-icon name="share" [size]="18" /> {{ 'match.shareInvite' | t }}</button>
+          }
+
+          <!-- Teams -->
+          @case ('teams') {
+            @if (m.rsvp.confirmed.length < 2) {
+              <p class="card card-pad text-center text-sm muted">{{ 'match.needConfirmed' | t }}</p>
+            } @else {
+              <button class="btn btn-primary btn-block" [disabled]="busy()" (click)="suggest()">
+                <app-icon name="shuffle" [size]="18" /> {{ (options().length ? 'match.remake' : 'match.makeTeams') | t }}
+              </button>
+              @if (options().length) {
+                <div class="mt-3 grid grid-cols-3 gap-2">
+                  @for (o of options(); track $index) {
+                    <button class="card px-2 py-2.5 text-center transition" (click)="pickOption($index)"
+                            [ngClass]="optionIndex() === $index ? '!border-[var(--primary)] ring-2 ring-[var(--primary)]' : ''">
+                      <div class="text-xs font-bold muted">{{ 'match.option' | t: { n: $index + 1 } }}</div>
+                      <div class="text-lg font-black num">{{ o.balance }}%</div>
+                      <div class="text-[11px] font-semibold muted">
+                        {{ o.preferencesTotal ? ('match.prefs' | t: { met: o.preferencesMet, total: o.preferencesTotal }) : ('match.noPrefs' | t) }}
+                      </div>
+                    </button>
+                  }
+                </div>
+              }
+              <div class="mt-4">
+                <app-pitch [teamA]="draftA()" [teamB]="draftB()" [bench]="bench()" [players]="players()" [editable]="true" [showStrength]="true"
+                           (changed)="onPitchChange($event)" />
+              </div>
+              <div class="mt-3 flex items-center justify-center">
+                <span class="chip" [ngClass]="m.teamsPublished && !dirty() ? 'chip-primary' : ''">
+                  {{ (m.teamsPublished && !dirty() ? 'match.published' : 'match.unpublished') | t }}
+                </span>
+              </div>
+              <div class="mt-3 grid grid-cols-2 gap-2">
+                <button class="btn btn-ghost" [disabled]="busy() || (!draftA().length && !draftB().length)" (click)="saveTeams(false)">{{ 'match.saveDraft' | t }}</button>
+                <button class="btn btn-primary" [disabled]="busy() || !draftA().length || !draftB().length" (click)="saveTeams(true)">{{ 'match.publish' | t }}</button>
+              </div>
+              @if (draftA().length && draftB().length) {
+                <button class="btn btn-soft btn-block mt-2" (click)="shareTeams()"><app-icon name="share" [size]="18" /> {{ 'match.shareTeams' | t }}</button>
+              }
+            }
+          }
+
+          <!-- Check-in -->
+          @case ('checkin') {
+            <p class="hint mb-3">{{ 'match.checkinHint' | t }}</p>
+            <div class="card">
+              @for (id of checkinList(); track id) {
+                @let a = attendanceOf(id);
+                <div class="row-link">
+                  <app-avatar [url]="players()[id]?.avatarUrl" [name]="name(id)" [size]="2.5" />
+                  <div class="min-w-0 flex-1">
+                    <div class="truncate font-bold">{{ name(id) }}</div>
+                    <div class="text-xs font-semibold" [ngClass]="a?.state === 'on_time' ? 'text-emerald-500' : a ? 'text-amber-500' : 'muted'">
+                      @switch (a?.state) {
+                        @case ('on_time') { ✓ {{ 'match.onTime' | t }} · {{ time(a!.arrivedAt) }} }
+                        @case ('late') { {{ 'match.late' | t: { n: a!.minutesLate } }} · {{ time(a!.arrivedAt) }} }
+                        @case ('no_show') { ✗ {{ 'match.noShow' | t }} }
+                        @default { — }
+                      }
+                    </div>
+                  </div>
+                  @if (a) {
+                    <button class="btn btn-sm btn-ghost" [disabled]="busy()" (click)="checkIn(id, 'clear')">{{ 'match.undo' | t }}</button>
+                  } @else {
+                    <button class="btn btn-sm btn-primary" [disabled]="busy()" (click)="checkIn(id, 'arrived')">{{ 'match.arrived' | t }}</button>
+                    <button class="btn btn-sm btn-danger" [disabled]="busy()" (click)="checkIn(id, 'no_show')" [attr.aria-label]="'match.noShow' | t">✗</button>
+                  }
+                </div>
+              }
+            </div>
+          }
+
+          <!-- Result -->
+          @case ('result') {
+            @if (!m.teamA.length || !m.teamB.length) {
+              <p class="card card-pad text-center text-sm muted">{{ 'match.teamsHidden' | t }}</p>
+            } @else {
+              <div class="card card-pad">
+                <div class="text-center text-xs font-bold uppercase muted">{{ 'match.score' | t }}</div>
+                <div class="mt-2 flex items-center justify-center gap-3" dir="ltr">
+                  <ng-container [ngTemplateOutlet]="stepper" [ngTemplateOutletContext]="{ value: scoreA(), color: 'var(--team-a)', dec: decA, inc: incA }" />
+                  <span class="text-2xl font-black muted">–</span>
+                  <ng-container [ngTemplateOutlet]="stepper" [ngTemplateOutletContext]="{ value: scoreB(), color: 'var(--team-b)', dec: decB, inc: incB }" />
+                </div>
+              </div>
+
+              <div class="section-title">{{ 'match.scorers' | t }}</div>
+              @for (team of [{ ids: m.teamA, label: 'match.teamA', color: 'var(--team-a)' }, { ids: m.teamB, label: 'match.teamB', color: 'var(--team-b)' }]; track team.label) {
+                <div class="card mb-3">
+                  <div class="px-4 pt-3 text-xs font-black uppercase" [style.color]="team.color">{{ team.label | t }}</div>
+                  @for (id of team.ids; track id) {
+                    <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t px-4 py-2.5 first-of-type:border-t-0" style="border-color: var(--border)">
+                      <span class="w-full truncate font-semibold sm:w-auto sm:flex-1">{{ name(id) }}</span>
+                      <div class="flex flex-1 items-center justify-between gap-1 sm:flex-none" dir="ltr">
+                        <button class="icon-btn !h-10 !w-10" (click)="bump('goals', id, -1)" [disabled]="!goals()[id]" aria-label="−">−</button>
+                        <span class="min-w-[3.25rem] text-center font-black num">⚽ {{ goals()[id] || 0 }}</span>
+                        <button class="icon-btn !h-10 !w-10" (click)="bump('goals', id, 1)" aria-label="+">+</button>
+                      </div>
+                      <div class="flex flex-1 items-center justify-between gap-1 sm:flex-none" dir="ltr">
+                        <button class="icon-btn !h-10 !w-10" (click)="bump('assists', id, -1)" [disabled]="!assists()[id]" aria-label="−">−</button>
+                        <span class="min-w-[3.25rem] text-center font-black num">👟 {{ assists()[id] || 0 }}</span>
+                        <button class="icon-btn !h-10 !w-10" (click)="bump('assists', id, 1)" aria-label="+">+</button>
+                      </div>
+                    </div>
+                  }
+                </div>
+              }
+              <button class="btn btn-primary btn-block" [disabled]="busy()" (click)="saveResult()">
+                {{ (m.status === 'completed' ? 'match.editResult' : 'match.saveResult') | t }}
+              </button>
+            }
+          }
+
+          <!-- Money -->
+          @case ('money') {
+            <div class="mb-3 flex items-center justify-between text-sm font-bold">
+              <span>{{ 'match.totalPaid' | t: { paid: paidCount(), total: played().length } }}</span>
+              <span class="muted">{{ i18n.money(m.price, currency()) }}</span>
+            </div>
+            <div class="card">
+              @for (id of played(); track id) {
+                <button class="row-link w-full text-start" (click)="togglePaid(id)" [disabled]="busy()">
+                  <app-avatar [url]="players()[id]?.avatarUrl" [name]="name(id)" [size]="2.25" />
+                  <span class="min-w-0 flex-1 truncate font-semibold">{{ name(id) }}</span>
+                  <span class="chip" [ngClass]="paidOf(id) ? 'chip-primary' : 'chip-danger'">{{ (paidOf(id) ? 'match.paid' : 'match.unpaid') | t }}</span>
+                </button>
+              }
+              @if (!played().length) { <p class="card-pad text-center text-sm muted">{{ 'match.teamsHidden' | t }}</p> }
+            </div>
+          }
+        }
+      </div>
+
+      <!-- Completed match: pitch with goals for the organizer too -->
+      @if (m.status === 'completed' && tab() === 'result') {
+        <div class="mt-5"><app-pitch [teamA]="m.teamA" [teamB]="m.teamB" [players]="players()" [stats]="m.stats" [mvp]="m.mvp" /></div>
+      }
+    }
+  }
+</div>
+
+<!-- Reply lists: confirmed / waitlist / maybe / out -->
+<ng-template #rsvpLists let-m="m" let-editable="editable">
+  @for (group of [
+    { key: 'confirmed', ids: m.rsvp.confirmed, label: 'match.confirmed' },
+    { key: 'waitlist', ids: m.rsvp.waitlist, label: 'match.waitlist' },
+    { key: 'maybe', ids: m.rsvp.maybe, label: 'match.maybe' },
+    { key: 'out', ids: m.rsvp.out, label: 'match.out' }
+  ]; track group.key) {
+    @if (group.ids.length) {
+      <div class="section-title">{{ group.label | t }} · {{ group.ids.length }}</div>
+      <div class="card">
+        @for (id of group.ids; track id; let i = $index) {
+          <div class="row-link !py-2">
+            @if (group.key === 'waitlist') { <span class="w-5 text-center text-xs font-black muted">{{ i + 1 }}</span> }
+            <app-avatar [url]="players()[id]?.avatarUrl" [name]="name(id)" [size]="2.25" />
+            <a class="min-w-0 flex-1" [routerLink]="['/squad', id]">
+              <span class="block truncate font-semibold">{{ name(id) }} @if (id === me()) { <span class="muted">·</span> 👤 }</span>
+              <span class="text-xs muted">{{ ('pos.short_' + (players()[id]?.position || 'MID')) | t }} · {{ players()[id]?.overall }}</span>
+            </a>
+            @if (editable) {
+              <select class="input !min-h-0 !w-auto !py-1.5 text-sm" [ngModel]="group.key === 'confirmed' || group.key === 'waitlist' ? 'in' : group.key"
+                      (ngModelChange)="setStatus(id, $event)" [attr.aria-label]="'match.setStatus' | t">
+                <option value="in">{{ 'home.in' | t }}</option>
+                <option value="maybe">{{ 'home.maybe' | t }}</option>
+                <option value="out">{{ 'home.out' | t }}</option>
+                <option value="remove">{{ 'match.remove' | t }}</option>
+              </select>
+            }
+          </div>
+        }
+      </div>
+    }
+  }
+</ng-template>
+
+<ng-template #stepper let-value="value" let-color="color" let-dec="dec" let-inc="inc">
+  <div class="flex flex-col items-center gap-1">
+    <button class="icon-btn" (click)="inc()">+</button>
+    <span class="text-4xl font-black num" [style.color]="color">{{ value }}</span>
+    <button class="icon-btn" (click)="dec()" [disabled]="!value">−</button>
+  </div>
+</ng-template>

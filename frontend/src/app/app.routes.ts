@@ -1,27 +1,32 @@
-import { Routes } from '@angular/router';
-import { LoginComponent } from './features/auth/login/login.component';
-import { RegisterComponent } from './features/auth/register/register.component';
-import { ForgotPasswordComponent } from './features/auth/forgot-password/forgot-password.component';
-import { DashboardComponent } from './features/dashboard/dashboard.component';
-import { MatchesComponent } from './features/matches/matches.component';
-import { MatchDetailComponent } from './features/match-detail/match-detail.component';
-import { FeedbackComponent } from './features/feedback/feedback.component';
-import { AdminDashboardComponent } from './features/admin-dashboard/admin-dashboard.component';
-import { NotesComponent } from './features/notes/notes.component';
-import { PollsComponent } from './features/polls/polls.component';
-import { authGuard } from './core/guards/auth.guard';
+import { inject } from '@angular/core';
+import { CanActivateFn, Router, Routes } from '@angular/router';
+import { AuthService } from './core/auth.service';
 
+const signedIn: CanActivateFn = (_route, state) => {
+  const auth = inject(AuthService);
+  return auth.isLoggedIn() ? true : inject(Router).createUrlTree(['/login'], { queryParams: { returnUrl: state.url } });
+};
+
+const signedOut: CanActivateFn = () => (inject(AuthService).isLoggedIn() ? inject(Router).createUrlTree(['/home']) : true);
+
+const organizer: CanActivateFn = () => (inject(AuthService).isOrganizer() ? true : inject(Router).createUrlTree(['/home']));
+
+/** Screens load on demand, so the first load on a phone stays small. */
 export const routes: Routes = [
-  { path: 'login', component: LoginComponent },
-  { path: 'register', component: RegisterComponent },
-  { path: 'forgot-password', component: ForgotPasswordComponent },
-  { path: 'matches', component: MatchesComponent, canActivate: [authGuard] },
-  { path: 'matches/:id', component: MatchDetailComponent, canActivate: [authGuard] },
-  { path: 'players', component: DashboardComponent, canActivate: [authGuard] },
-  { path: 'feedback', component: FeedbackComponent, canActivate: [authGuard] },
-  { path: 'admin', component: AdminDashboardComponent, canActivate: [authGuard] },
-  { path: 'notes', component: NotesComponent, canActivate: [authGuard] },
-  { path: 'vote', component: PollsComponent, canActivate: [authGuard] },
-  { path: '', redirectTo: '/matches', pathMatch: 'full' },
-  { path: '**', redirectTo: '/matches' }
+  { path: 'login', canActivate: [signedOut], loadComponent: () => import('./features/auth/login.page').then(m => m.LoginPage) },
+  { path: 'join/:code', canActivate: [signedOut], loadComponent: () => import('./features/auth/join.page').then(m => m.JoinPage) },
+  { path: 'forgot', canActivate: [signedOut], loadComponent: () => import('./features/auth/forgot.page').then(m => m.ForgotPage) },
+
+  { path: 'home', canActivate: [signedIn], loadComponent: () => import('./features/home/home.page').then(m => m.HomePage) },
+  { path: 'matches', canActivate: [signedIn], loadComponent: () => import('./features/matches/matches.page').then(m => m.MatchesPage) },
+  { path: 'matches/:id', canActivate: [signedIn], loadComponent: () => import('./features/matches/match.page').then(m => m.MatchPage) },
+  { path: 'matches/:id/rate', canActivate: [signedIn], loadComponent: () => import('./features/rate/rate.page').then(m => m.RatePage) },
+  { path: 'squad', canActivate: [signedIn], loadComponent: () => import('./features/squad/squad.page').then(m => m.SquadPage) },
+  { path: 'squad/:id', canActivate: [signedIn], loadComponent: () => import('./features/squad/player.page').then(m => m.PlayerPage) },
+  { path: 'vote', canActivate: [signedIn], loadComponent: () => import('./features/polls/polls.component').then(m => m.PollsComponent) },
+  { path: 'me', canActivate: [signedIn], loadComponent: () => import('./features/me/me.page').then(m => m.MePage) },
+  { path: 'organizer', canActivate: [signedIn, organizer], loadComponent: () => import('./features/organizer/organizer.page').then(m => m.OrganizerPage) },
+
+  { path: '', pathMatch: 'full', redirectTo: 'home' },
+  { path: '**', redirectTo: 'home' }
 ];

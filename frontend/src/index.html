@@ -1,36 +1,46 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
   <meta charset="utf-8">
-  <title>5-A-Side Manager — The Ultimate Pitch Manager</title>
+  <title>5-a-side</title>
   <base href="/">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="description" content="Manage your 5-a-side football matches, players, and stats with AI-powered insights.">
+  <meta name="description" content="Your group's 5-a-side matches, fair teams and ratings.">
+  <meta name="theme-color" content="#07110c">
+  <meta name="color-scheme" content="dark light">
 
-  <!-- PWA -->
   <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
-  <meta name="theme-color" content="#00C853" media="(prefers-color-scheme: light)">
-
-  <!-- iOS PWA -->
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="5-Side MGR">
+  <meta name="apple-mobile-web-app-title" content="5-a-side">
   <link rel="apple-touch-icon" href="assets/icons/icon-192x192.png">
-  <link rel="apple-touch-icon" sizes="152x152" href="assets/icons/icon-152x152.png">
-  <link rel="apple-touch-icon" sizes="144x144" href="assets/icons/icon-144x144.png">
+  <link rel="icon" type="image/png" href="assets/icons/icon-96x96.png">
 
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="assets/icons/icon-192x192.png">
-
-  <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+
+  <!-- Apply saved theme and language before first paint (no flash). -->
+  <script src="boot.js"></script>
+  <style>
+    /* Splash shown until the app starts. On a sleeping free server this can take a while. */
+    #splash { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+              background: #07110c; color: #8aa497; font: 600 14px system-ui, sans-serif; text-align: center; padding: 24px; }
+    html:not(.dark) #splash { background: #f3f6f4; color: #55655c; }
+    #splash .ball { font-size: 44px; animation: bounce 1s ease-in-out infinite; }
+    #splash .slow { opacity: 0; animation: show .3s 4s forwards; }
+    @keyframes bounce { 50% { transform: translateY(-14px); } }
+    @keyframes show { to { opacity: 1; } }
+    app-root:not(:empty) + #splash { display: none; }
+  </style>
 </head>
 <body>
-
   <app-root></app-root>
-  <noscript>Please enable JavaScript to continue using this application.</noscript>
+  <div id="splash" aria-hidden="true">
+    <div class="ball">⚽</div>
+    <div class="slow" id="splash-text">Waking the server up… this can take up to a minute.</div>
+  </div>
+  <noscript>Please enable JavaScript to use this app.</noscript>
 </body>
 </html>
