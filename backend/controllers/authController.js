@@ -1,275 +1,203 @@
 import jwt from 'jsonwebtoken';
-const { sign, verify } = jwt;
-import { randomBytes, createHash } from 'crypto';
+import { createHash, randomInt, timingSafeEqual } from 'crypto';
 import User from '../models/User.js';
-import asyncHandler from '../middlewares/asyncHandler.js';
+import Player from '../models/Player.js';
+import { getSettings } from '../models/Settings.js';
+import { httpError } from '../utils/httpError.js';
+import * as v from '../utils/validate.js';
+import { meView } from '../services/views.js';
+import { recomputeStandings } from '../services/standingsService.js';
+import { emailConfigured, sendResetCode } from '../services/emailService.js';
 
-const generateAccessToken = (id) => {
-    return sign({ id }, process.env.JWT_SECRET, { expiresIn: '15m' });
+const ACCESS_TTL = '15m';
+const REFRESH_TTL_DAYS = 30;
+const RESET_TTL_MS = 15 * 60 * 1000;
+const RESET_MAX_ATTEMPTS = 5;
+
+const sha256 = (s) => createHash('sha256').update(s).digest('hex');
+const safeEqual = (a, b) => {
+    const x = Buffer.from(a || '');
+    const y = Buffer.from(b || '');
+    return x.length === y.length && timingSafeEqual(x, y);
 };
 
-const generateRefreshToken = (id) => {
-    return sign({ id }, process.env.REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
+const signAccess = (user) => jwt.sign({ id: String(user._id) }, process.env.JWT_SECRET, { expiresIn: ACCESS_TTL, algorithm: 'HS256' });
+const signRefresh = (user) => jwt.sign({ id: String(user._id) }, process.env.REFRESH_TOKEN_SECRET, { expiresIn: `${REFRESH_TTL_DAYS}d`, algorithm: 'HS256' });
+
+// The refresh cookie is only sent to /api/auth, can't be read by JavaScript,
+// and isn't sent from other websites.
+const cookieOptions = () => ({
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/api/auth',
+    maxAge: REFRESH_TTL_DAYS * 24 * 3600 * 1000
+});
+
+const MAX_DEVICES = 5;
+
+/**
+ * Issues a new token pair. Only a hash of the refresh token is stored.
+ * `replaceHash` is the hash of the token being rotated out (on refresh).
+ */
+const startSession = async (res, user, replaceHash = null) => {
+    const refresh = signRefresh(user);
+    const kept = (user.refreshTokenHashes || []).filter(h => h !== replaceHash);
+    user.refreshTokenHashes = [...kept, sha256(refresh)].slice(-MAX_DEVICES);
+    await user.save();
+    res.cookie('refreshToken', refresh, cookieOptions());
+    return signAccess(user);
 };
 
-// @desc    Register new user
-// @route   POST /api/auth/register
-// @access  Public
-const registerUser = asyncHandler(async (req, res) => {
-    const { email, password, securityQuestion, securityAnswer } = req.body;
+const isOrganizerEmail = (email) =>
+    !!process.env.ORGANIZER_EMAIL && email === process.env.ORGANIZER_EMAIL.trim().toLowerCase();
 
-    if (!email || !password || !securityQuestion || !securityAnswer) {
-        res.status(400);
-        throw new Error('Please add all fields');
+// @route GET /api/auth/invite/:code  — is this invite link valid?
+export const checkInvite = async (req, res) => {
+    const settings = await getSettings();
+    const code = String(req.params.code || '');
+    if (!safeEqual(code, settings.inviteCode)) throw httpError(404, 'This invite link is not valid any more');
+    res.json({ valid: true, groupName: settings.groupName });
+};
+
+// @route POST /api/auth/register
+// Sign-up needs the group's invite code. The one exception is ORGANIZER_EMAIL
+// (set on the server), which creates the organizer account.
+export const register = async (req, res) => {
+    const b = req.body || {};
+    const email = v.email(b.email);
+    const organizer = isOrganizerEmail(email);
+
+    if (!organizer) {
+        const settings = await getSettings();
+        if (!safeEqual(String(b.inviteCode || ''), settings.inviteCode)) {
+            throw httpError(403, 'You need an invite link from the organizer to join');
+        }
     }
+    if (b.consent !== true) throw httpError(400, 'Please agree to share your contact details with the organizer');
 
-    const userExists = await User.findOne({ email });
-    if (userExists) {
-        res.status(400);
-        throw new Error('User already exists');
-    }
+    const name = v.str(b.name, { min: 2, max: 40, field: 'Name', required: true });
+    const pass = v.password(b.password);
+    const phone = v.phone(b.phone, true);
+    const position = v.position(b.position, true);
+    const selfRating = v.selfRating(b.selfRating ?? {});
 
-    const user = await User.create({
-        name: req.body.name || 'Manager',
+    if (await User.exists({ email })) throw httpError(409, 'An account with this email already exists');
+
+    const user = new User({
         email,
-        passwordHash: password,
-        securityQuestion,
-        securityAnswerHash: securityAnswer.toLowerCase().trim()
+        name,
+        phone,
+        role: organizer ? 'organizer' : 'member',
+        contactConsentAt: new Date(),
+        preferences: { lang: b.lang === 'ar' ? 'ar' : 'en' }
     });
+    await user.setPassword(pass);
+    await user.save();
 
-    if (user) {
-        res.status(201).json({
-            _id: user.id,
-            name: user.name,
-            email: user.email,
-            isAdmin: user.isAdmin
-        });
-    } else {
-        res.status(400);
-        throw new Error('Invalid user data');
+    try {
+        await Player.create({ user: user._id, name, position, selfRating, attrs: selfRating });
+    } catch (err) {
+        await user.deleteOne();
+        throw err;
     }
-});
+    await recomputeStandings({ capChanges: false });
 
-// @desc    Authenticate a user
-// @route   POST /api/auth/login
-// @access  Public
-const loginUser = asyncHandler(async (req, res) => {
-    const { email, password } = req.body;
+    const accessToken = await startSession(res, user);
+    res.status(201).json({ accessToken, ...(await meView(user, await Player.findOne({ user: user._id }))) });
+};
 
-    if (!email) {
-        res.status(401);
-        throw new Error('Invalid credentials');
-    }
+// @route POST /api/auth/login
+export const login = async (req, res) => {
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const user = email ? await User.findOne({ email }).select('+passwordHash +refreshTokenHashes') : null;
+    // Same message whether the email exists or not.
+    if (!user || !(await user.matchPassword(req.body?.password))) throw httpError(401, 'Wrong email or password');
 
-    const user = await User.findOne({ email });
+    const accessToken = await startSession(res, user);
+    res.json({ accessToken, ...(await meView(user, await Player.findOne({ user: user._id }))) });
+};
 
-    if (user && (await user.matchPassword(password))) {
-        const accessToken = generateAccessToken(user._id);
-        const refreshToken = generateRefreshToken(user._id);
-
-        user.refreshToken = refreshToken;
-        await user.save();
-
-        res.cookie('refreshToken', refreshToken, {
-            httpOnly: true,
-            secure: true,
-            sameSite: 'None',
-            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-        });
-
-        res.json({
-            _id: user.id,
-            name: user.name,
-            email: user.email,
-            preferences: user.preferences,
-            isAdmin: user.isAdmin,
-            accessToken
-        });
-    } else {
-        res.status(401);
-        throw new Error('Invalid credentials');
-    }
-});
-
-// @desc    Refresh Token with rotation
-// @route   POST /api/auth/refresh
-// @access  Public
-const refreshToken = asyncHandler(async (req, res) => {
+// @route POST /api/auth/refresh  — swaps the cookie for a fresh token pair (rotation)
+export const refresh = async (req, res) => {
     const token = req.cookies?.refreshToken;
-    if (!token) {
-        res.status(401);
-        throw new Error('Not authorized, no refresh token');
-    }
+    if (!token) throw httpError(401, 'Not signed in');
 
     let decoded;
     try {
-        decoded = verify(token, process.env.REFRESH_TOKEN_SECRET);
+        decoded = jwt.verify(token, process.env.REFRESH_TOKEN_SECRET, { algorithms: ['HS256'] });
     } catch {
-        res.status(401);
-        throw new Error('Not authorized, token failed');
+        throw httpError(401, 'Not signed in');
+    }
+    const hash = sha256(token);
+    const user = await User.findById(decoded.id).select('+refreshTokenHashes');
+    if (!user || !user.refreshTokenHashes.some(h => safeEqual(h, hash))) {
+        // A valid but already-used token means it may have been stolen: end every session.
+        if (user) { user.refreshTokenHashes = []; await user.save(); }
+        res.clearCookie('refreshToken', { ...cookieOptions(), maxAge: undefined });
+        throw httpError(401, 'Not signed in');
     }
 
-    const user = await User.findById(decoded.id);
+    const accessToken = await startSession(res, user, hash);
+    res.json({ accessToken, ...(await meView(user, await Player.findOne({ user: user._id }))) });
+};
 
-    if (!user || user.refreshToken !== token) {
-        res.status(401);
-        throw new Error('Not authorized, token reuse or mismatch detected');
+// @route POST /api/auth/logout
+export const logout = async (req, res) => {
+    const token = req.cookies?.refreshToken;
+    if (token) {
+        await User.updateOne({ refreshTokenHashes: sha256(token) }, { $pull: { refreshTokenHashes: sha256(token) } });
     }
+    res.clearCookie('refreshToken', { ...cookieOptions(), maxAge: undefined });
+    res.json({ ok: true });
+};
 
-    // Rotate: issue new access token AND new refresh token
-    const newAccessToken = generateAccessToken(user._id);
-    const newRefreshToken = generateRefreshToken(user._id);
-
-    user.refreshToken = newRefreshToken;
-    await user.save();
-
-    res.cookie('refreshToken', newRefreshToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'None',
-        maxAge: 7 * 24 * 60 * 60 * 1000
-    });
-
-    res.json({ accessToken: newAccessToken });
-});
-
-// @desc    Logout user
-// @route   POST /api/auth/logout
-// @access  Private
-const logoutUser = asyncHandler(async (req, res) => {
-    const user = await User.findById(req.user.id);
+// @route POST /api/auth/forgot  — emails a 6-digit code. Always answers the same way.
+export const forgotPassword = async (req, res) => {
+    if (!emailConfigured()) throw httpError(503, 'Password reset by email is not set up yet. Ask the organizer.');
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const user = email ? await User.findOne({ email }) : null;
     if (user) {
-        user.refreshToken = '';
+        const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
+        user.resetCodeHash = sha256(`${user._id}:${code}`);
+        user.resetCodeExpires = new Date(Date.now() + RESET_TTL_MS);
+        user.resetAttempts = 0;
         await user.save();
-    }
-
-    res.cookie('refreshToken', '', {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'None',
-        expires: new Date(0)
-    });
-
-    res.json({ message: 'Logged out successfully' });
-});
-
-// @desc    Update user profile
-// @route   PUT /api/auth/profile
-// @access  Private
-const updateProfile = asyncHandler(async (req, res) => {
-    const user = await User.findById(req.user.id);
-    if (user) {
-        user.name = req.body.name || user.name;
-        if (req.body.password) {
-            user.passwordHash = req.body.password;
+        try {
+            await sendResetCode(user.email, user.name, code);
+        } catch (err) {
+            console.error('Reset email failed:', err.message);
         }
-        const updatedUser = await user.save();
-        res.json({
-            _id: updatedUser.id,
-            name: updatedUser.name,
-            email: updatedUser.email,
-            isAdmin: updatedUser.isAdmin
-        });
-    } else {
-        res.status(404);
-        throw new Error('User not found');
     }
-});
+    res.json({ ok: true, message: 'If that email has an account, a code is on its way.' });
+};
 
-// @desc    Get Security Question for Password Reset
-// @route   POST /api/auth/security-question
-// @access  Public
-const getSecurityQuestion = asyncHandler(async (req, res) => {
-    const { email } = req.body;
-    if (!email) {
-        res.status(400);
-        throw new Error('Please provide an email');
+// @route POST /api/auth/reset  { email, code, newPassword }
+export const resetPassword = async (req, res) => {
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const code = String(req.body?.code || '');
+    const newPassword = v.password(req.body?.newPassword);
+
+    const user = email ? await User.findOne({ email }).select('+resetCodeHash +resetCodeExpires +resetAttempts') : null;
+    const invalid = httpError(400, 'Wrong or expired code');
+    if (!user || !user.resetCodeHash || user.resetCodeExpires < new Date()) throw invalid;
+
+    if (user.resetAttempts >= RESET_MAX_ATTEMPTS) {
+        user.resetCodeHash = undefined;
+        await user.save();
+        throw httpError(400, 'Too many wrong codes. Ask for a new one.');
     }
-
-    const user = await User.findOne({ email });
-    if (!user) {
-        res.status(404);
-        throw new Error('There is no user with that email');
+    if (!safeEqual(user.resetCodeHash, sha256(`${user._id}:${code}`))) {
+        user.resetAttempts += 1;
+        await user.save();
+        throw invalid;
     }
 
-    if (!user.securityQuestion) {
-        res.status(400);
-        throw new Error('This user does not have a security question set up. Please contact an admin.');
-    }
-
-    res.status(200).json({ success: true, securityQuestion: user.securityQuestion });
-});
-
-// @desc    Verify Security Answer
-// @route   POST /api/auth/verify-security-answer
-// @access  Public
-const verifySecurityAnswer = asyncHandler(async (req, res) => {
-    const { email, securityAnswer } = req.body;
-
-    if (!email || !securityAnswer) {
-        res.status(400);
-        throw new Error('Please provide email and security answer');
-    }
-
-    const user = await User.findOne({ email });
-    if (!user) {
-        res.status(404);
-        throw new Error('User not found');
-    }
-
-    const isMatch = await user.matchSecurityAnswer(securityAnswer);
-    if (!isMatch) {
-        res.status(401);
-        throw new Error('Incorrect security answer');
-    }
-
-    const tempResetToken = randomBytes(20).toString('hex');
-    user.tempResetToken = createHash('sha256').update(tempResetToken).digest('hex');
-    user.tempResetTokenExpire = Date.now() + 15 * 60 * 1000;
+    await user.setPassword(newPassword);
+    user.resetCodeHash = undefined;
+    user.resetCodeExpires = undefined;
+    user.resetAttempts = 0;
+    user.refreshTokenHashes = []; // sign out everywhere
     await user.save();
-
-    res.status(200).json({ success: true, resetToken: tempResetToken });
-});
-
-// @desc    Reset Password with Token
-// @route   POST /api/auth/reset-password
-// @access  Public
-const resetPasswordWithToken = asyncHandler(async (req, res) => {
-    const { email, resetToken, newPassword } = req.body;
-
-    if (!email || !resetToken || !newPassword) {
-        res.status(400);
-        throw new Error('Please provide all fields');
-    }
-
-    const hashedToken = createHash('sha256').update(resetToken).digest('hex');
-
-    const user = await User.findOne({
-        email,
-        tempResetToken: hashedToken,
-        tempResetTokenExpire: { $gt: Date.now() }
-    });
-
-    if (!user) {
-        res.status(400);
-        throw new Error('Invalid or expired reset token');
-    }
-
-    user.passwordHash = newPassword;
-    user.tempResetToken = undefined;
-    user.tempResetTokenExpire = undefined;
-    await user.save();
-
-    res.status(200).json({ success: true, message: 'Password reset successful' });
-});
-
-export {
-    registerUser,
-    loginUser,
-    refreshToken,
-    logoutUser,
-    updateProfile,
-    getSecurityQuestion,
-    verifySecurityAnswer,
-    resetPasswordWithToken
+    res.json({ ok: true });
 };

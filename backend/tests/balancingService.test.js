@@ -1,72 +1,68 @@
 import { describe, it, expect } from '@jest/globals';
 import { balanceTeams } from '../services/balancingService.js';
 
-const makePlayer = (id, position, overall) => ({
-    _id: id,
-    position,
-    overallRating: overall,
-    attributes: {
-        speed: 50, shooting: 50, passing: 50, defending: overall,
-        physical: 50, stamina: 50, goalkeeping: 50,
-        positioning: 50, longPass: 50, shortPass: 50
-    }
-});
+const p = (id, overall, position = 'MID') => ({ id, overall, position });
+const avg = (team, players) => team.reduce((s, id) => s + players.find(x => x.id === id).overall, 0) / team.length;
 
-describe('balancingService — balanceTeams', () => {
-    it('should split 10 players into two equal teams', () => {
-        const players = [
-            makePlayer('1', 'GK', 80), makePlayer('2', 'GK', 70),
-            makePlayer('3', 'DEF', 75), makePlayer('4', 'DEF', 65),
-            makePlayer('5', 'MID', 85), makePlayer('6', 'MID', 60),
-            makePlayer('7', 'MID', 72), makePlayer('8', 'MID', 68),
-            makePlayer('9', 'FWD', 90), makePlayer('10', 'FWD', 55)
-        ];
-        const { teamA, teamB } = balanceTeams(players);
-        expect(teamA.length).toBe(5);
-        expect(teamB.length).toBe(5);
+describe('balanceTeams', () => {
+    const ten = [
+        p('a', 85, 'FWD'), p('b', 80, 'MID'), p('c', 75, 'DEF'), p('d', 70, 'MID'), p('e', 65, 'FWD'),
+        p('f', 60, 'DEF'), p('g', 58, 'MID'), p('h', 55, 'GK'), p('i', 52, 'GK'), p('j', 50, 'MID')
+    ];
+
+    it('splits 10 players 5 v 5 with almost equal strength', () => {
+        const [best] = balanceTeams(ten);
+        expect(best.teamA).toHaveLength(5);
+        expect(best.teamB).toHaveLength(5);
+        expect(Math.abs(avg(best.teamA, ten) - avg(best.teamB, ten))).toBeLessThanOrEqual(1);
+        expect(best.balance).toBeGreaterThanOrEqual(98);
     });
 
-    it('should handle odd number of players', () => {
-        const players = [
-            makePlayer('1', 'GK', 80),
-            makePlayer('2', 'MID', 70),
-            makePlayer('3', 'MID', 65),
-        ];
-        const { teamA, teamB } = balanceTeams(players);
-        expect(teamA.length + teamB.length).toBe(3);
+    it('puts the two keepers on different teams', () => {
+        const [best] = balanceTeams(ten);
+        expect(best.teamA.includes('h')).not.toBe(best.teamA.includes('i'));
     });
 
-    it('should handle 2 players (minimum)', () => {
-        const players = [
-            makePlayer('1', 'FWD', 80),
-            makePlayer('2', 'FWD', 70),
-        ];
-        const { teamA, teamB } = balanceTeams(players);
-        expect(teamA.length).toBe(1);
-        expect(teamB.length).toBe(1);
+    it('returns 3 genuinely different options', () => {
+        const options = balanceTeams(ten, { count: 3 });
+        expect(options).toHaveLength(3);
+        const keys = options.map(o => [...o.teamA].sort().join());
+        expect(new Set(keys).size).toBe(3);
     });
 
-    it('should auto-assign a temporary GK when no GK is present', () => {
-        const players = [
-            makePlayer('1', 'DEF', 80), // highest defending — becomes temp GK
-            makePlayer('2', 'MID', 70),
-            makePlayer('3', 'FWD', 65),
-            makePlayer('4', 'FWD', 60),
-        ];
-        const { teamA, teamB } = balanceTeams(players);
-        const allPlayers = [...teamA, ...teamB];
-        const tempGK = allPlayers.find(p => p.isTemporaryGK);
-        expect(tempGK).toBeDefined();
+    it('keeps "prefer not" pairs apart and reports only counts', () => {
+        const players = [p('a', 70), p('b', 70), p('c', 60), p('d', 60)];
+        const [best] = balanceTeams(players, { preferences: [{ from: 'a', avoid: ['b'] }] });
+        expect(best.teamA.includes('a')).not.toBe(best.teamA.includes('b'));
+        expect(best).toMatchObject({ preferencesMet: 1, preferencesTotal: 1 });
+        expect(JSON.stringify(best)).not.toMatch(/avoid|with/);
     });
 
-    it('should produce teams with reasonably balanced total ratings', () => {
-        const players = [
-            makePlayer('1', 'GK', 90), makePlayer('2', 'GK', 85),
-            makePlayer('3', 'DEF', 80), makePlayer('4', 'DEF', 75),
-            makePlayer('5', 'FWD', 70), makePlayer('6', 'FWD', 65),
-        ];
-        const { totalRatingA, totalRatingB } = balanceTeams(players);
-        const diff = Math.abs(totalRatingA - totalRatingB);
-        expect(diff).toBeLessThanOrEqual(20); // teams should be close
+    it('honours "play with" wishes when it costs little balance', () => {
+        const players = [p('a', 70), p('b', 69), p('c', 70), p('d', 69)];
+        const [best] = balanceTeams(players, { preferences: [{ from: 'a', with: ['b'] }] });
+        expect(best.teamA.includes('a')).toBe(best.teamA.includes('b'));
+    });
+
+    it('does not let preferences wreck the balance', () => {
+        const players = [p('a', 90), p('b', 90), p('c', 50), p('d', 50)];
+        const [best] = balanceTeams(players, { preferences: [{ from: 'a', with: ['b'] }] });
+        expect(best.teamA.includes('a')).not.toBe(best.teamA.includes('b'));
+    });
+
+    it('handles an odd number of players', () => {
+        const [best] = balanceTeams(ten.slice(0, 9));
+        expect(best.teamA.length + best.teamB.length).toBe(9);
+        expect(Math.abs(best.teamA.length - best.teamB.length)).toBe(1);
+    });
+
+    it('mixes up teammates from recent weeks', () => {
+        const players = [p('a', 60), p('b', 60), p('c', 60), p('d', 60)];
+        const [best] = balanceTeams(players, { recentTeams: [['a', 'b'], ['c', 'd'], ['a', 'b'], ['c', 'd']] });
+        expect(best.teamA.includes('a')).not.toBe(best.teamA.includes('b'));
+    });
+
+    it('rejects too few players', () => {
+        expect(() => balanceTeams([p('a', 60)])).toThrow();
     });
 });

@@ -1,34 +1,46 @@
 import { describe, it, expect } from '@jest/globals';
-import { rankCandidates, pickWinner, serializePoll } from '../services/pollService.js';
+import { matchPerformance, rankCandidates, pickWinner, serializePoll } from '../services/pollService.js';
 
-const stat = (playerId, goals, assists, matchRating) => ({ playerId, goals, assists, matchRating });
+const match = ({ teamA, teamB, a, b, stats = [], mvp = null }) => ({
+    teamA, teamB, score: { a, b }, stats, mvp, ratingsFinalized: !!mvp
+});
 
-describe('pollService — rankCandidates', () => {
-    it('averages ratings across matches and sorts best first', () => {
+describe('pollService: matchPerformance', () => {
+    it('starts at 6 and adds goals, assists, the win and MVP', () => {
+        expect(matchPerformance({})).toBe(6);
+        expect(matchPerformance({ goals: 2, assists: 1, won: true, mvp: true })).toBe(10);
+        expect(matchPerformance({ goals: 1, won: true })).toBe(7.3);
+    });
+
+    it('never goes above 10', () => {
+        expect(matchPerformance({ goals: 9 })).toBe(10);
+    });
+});
+
+describe('pollService: rankCandidates', () => {
+    it('averages performance across matches and sorts best first', () => {
         const matches = [
-            { playerStats: [stat('a', 2, 0, 8), stat('b', 0, 1, 6.5)] },
-            { playerStats: [stat('a', 1, 1, 7.3), stat('b', 0, 0, 6)] },
-            { playerStats: [stat('c', 3, 0, 9)] }
+            match({ teamA: ['a', 'b'], teamB: ['c'], a: 2, b: 0, stats: [{ player: 'a', goals: 2, assists: 0 }] }),
+            match({ teamA: ['a'], teamB: ['b', 'c'], a: 0, b: 1, stats: [{ player: 'c', goals: 1, assists: 0 }] })
         ];
         const ranked = rankCandidates(matches, 5);
-        expect(ranked.map(r => r.playerId)).toEqual(['c', 'a', 'b']);
-        expect(ranked[1]).toMatchObject({ playerId: 'a', avgRating: 7.7, goals: 3, assists: 1, matches: 2 });
+        expect(ranked[0]).toMatchObject({ playerId: 'a', goals: 2, matches: 2 });
+        expect(ranked.map(r => r.playerId)).toEqual(['a', 'c', 'b']);
     });
 
     it('limits the number of candidates', () => {
-        const matches = [{ playerStats: ['a', 'b', 'c', 'd'].map((id, i) => stat(id, 0, 0, 6 + i)) }];
-        expect(rankCandidates(matches, 2)).toHaveLength(2);
+        const m = match({ teamA: ['a', 'b'], teamB: ['c', 'd'], a: 1, b: 0 });
+        expect(rankCandidates([m], 2)).toHaveLength(2);
     });
 
-    it('breaks rating ties with goal contributions', () => {
-        const matches = [{ playerStats: [stat('a', 0, 0, 7), stat('b', 1, 1, 7)] }];
-        expect(rankCandidates(matches, 5)[0].playerId).toBe('b');
+    it('counts the MVP bonus only once ratings are finalized', () => {
+        const m = match({ teamA: ['a'], teamB: ['b'], a: 0, b: 0, mvp: 'b' });
+        expect(rankCandidates([m], 5)[0].playerId).toBe('b');
     });
 });
 
 const buildPoll = (votes) => ({
     _id: 'poll1',
-    userId: 'manager',
     title: 'Player of the Week',
     type: 'weekly',
     isActive: true,
@@ -36,8 +48,8 @@ const buildPoll = (votes) => ({
     closedAt: null,
     winner: null,
     candidates: [
-        { _id: 'a', name: 'Ali', position: 'FWD', overallRating: 80 },
-        { _id: 'b', name: 'Bob', position: 'DEF', overallRating: 70 }
+        { _id: 'a', name: 'Ali', position: 'FWD', overall: 80 },
+        { _id: 'b', name: 'Bob', position: 'DEF', overall: 70 }
     ],
     candidateStats: [
         { playerId: 'a', avgRating: 7.5, goals: 3, assists: 1, matches: 3 },
@@ -46,11 +58,9 @@ const buildPoll = (votes) => ({
     votes
 });
 
-describe('pollService — pickWinner', () => {
+describe('pollService: pickWinner', () => {
     it('returns the player with the most votes', () => {
-        const poll = buildPoll([
-            { userId: 'u1', playerId: 'a' }, { userId: 'u2', playerId: 'a' }, { userId: 'u3', playerId: 'b' }
-        ]);
+        const poll = buildPoll([{ userId: 'u1', playerId: 'a' }, { userId: 'u2', playerId: 'a' }, { userId: 'u3', playerId: 'b' }]);
         expect(pickWinner(poll)).toBe('a');
     });
 
@@ -64,25 +74,19 @@ describe('pollService — pickWinner', () => {
     });
 });
 
-describe('pollService — serializePoll', () => {
-    it('reports vote percentages and the viewer\'s own vote without leaking voter ids', () => {
-        const poll = buildPoll([
-            { userId: 'u1', playerId: 'a' }, { userId: 'u2', playerId: 'a' },
-            { userId: 'u3', playerId: 'a' }, { userId: 'u4', playerId: 'b' }
-        ]);
-        const out = serializePoll(poll, 'u4');
-        expect(out.totalVotes).toBe(4);
+describe('pollService: serializePoll', () => {
+    it('reports percentages and the viewer\'s own vote without leaking voter ids', () => {
+        const poll = buildPoll([{ userId: 'u1', playerId: 'a' }, { userId: 'u2', playerId: 'a' }, { userId: 'u3', playerId: 'b' }]);
+        const out = serializePoll(poll, 'u3');
         expect(out.hasVoted).toBe(true);
         expect(out.myVote).toBe('b');
-        expect(out.isOwner).toBe(false);
-        expect(out.candidates.find(c => c._id === 'a')).toMatchObject({ votes: 3, percent: 75 });
+        expect(out.totalVotes).toBe(3);
+        expect(out.candidates.find(c => c._id === 'a')).toMatchObject({ votes: 2, percent: 67 });
         expect(JSON.stringify(out)).not.toContain('u1');
     });
 
-    it('flags the creator as owner and a non-voter as not voted', () => {
-        const out = serializePoll(buildPoll([]), 'manager');
-        expect(out.isOwner).toBe(true);
-        expect(out.hasVoted).toBe(false);
-        expect(out.candidates.every(c => c.percent === 0)).toBe(true);
+    it('passes through whether the viewer can manage the poll', () => {
+        expect(serializePoll(buildPoll([]), 'u9', true).canManage).toBe(true);
+        expect(serializePoll(buildPoll([]), 'u9').canManage).toBe(false);
     });
 });

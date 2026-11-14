@@ -1,36 +1,31 @@
 import jwt from 'jsonwebtoken';
-const { verify } = jwt;
 import User from '../models/User.js';
+import Player from '../models/Player.js';
+import { httpError } from '../utils/httpError.js';
 
-const protect = async (req, res, next) => {
-    let token;
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-        try {
-            token = req.headers.authorization.split(' ')[1];
-            const decoded = verify(token, process.env.JWT_SECRET);
-            req.user = await User.findById(decoded.id).select('-passwordHash');
-            if (!req.user) {
-                res.status(401);
-                throw new Error('User not found');
-            }
-            next();
-        } catch (error) {
-            res.status(401);
-            next(new Error('Not authorized, token failed'));
-        }
-    } else {
-        res.status(401);
-        next(new Error('Not authorized, no token'));
-    }
-};
+/**
+ * Requires a valid access token. Loads the user and their player profile onto
+ * the request as req.user and req.player.
+ */
+export const protect = async (req, res, next) => {
+    const header = req.headers.authorization || '';
+    if (!header.startsWith('Bearer ')) return next(httpError(401, 'Not authorized'));
 
-const isAdmin = (req, res, next) => {
-    if (req.user && req.user.isAdmin) {
+    try {
+        const decoded = jwt.verify(header.slice(7), process.env.JWT_SECRET, { algorithms: ['HS256'] });
+        const user = await User.findById(decoded.id);
+        if (!user) return next(httpError(401, 'Not authorized'));
+        req.user = user;
+        req.player = await Player.findOne({ user: user._id });
         next();
-    } else {
-        res.status(403);
-        next(new Error('Not authorized as an admin'));
+    } catch {
+        next(httpError(401, 'Not authorized'));
     }
 };
 
-export { protect, isAdmin };
+export const organizerOnly = (req, res, next) => {
+    if (req.user?.role === 'organizer') return next();
+    next(httpError(403, 'Organizer only'));
+};
+
+export const isOrganizer = (req) => req.user?.role === 'organizer';

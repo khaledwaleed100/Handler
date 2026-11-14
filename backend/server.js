@@ -2,128 +2,110 @@ import 'dotenv/config.js';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import compression from 'compression';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { default as connectDB } from './config/db.js';
-import { apiLimiter } from './middlewares/rateLimiter.js';
-import authRoutes from './routes/authRoutes.js';
-import playerRoutes from './routes/playerRoutes.js';
-import matchRoutes from './routes/matchRoutes.js';
-import feedbackRoutes from './routes/feedbackRoutes.js';
-import adminRoutes from './routes/adminRoutes.js';
-import notesRoutes from './routes/notes.js';
-import statsRoutes from './routes/statsRoutes.js';
-import pollRoutes from './routes/pollRoutes.js';
-import { notFound, errorHandler } from './middlewares/errorMiddleware.js';
 import cookieParser from 'cookie-parser';
+import connectDB from './config/db.js';
+import { apiLimiter } from './middlewares/rateLimiter.js';
+import { sanitizeBody } from './middlewares/sanitize.js';
+import { notFound, errorHandler } from './middlewares/errorMiddleware.js';
+import apiRoutes from './routes/index.js';
 
-// Resolve directory name
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const isProd = process.env.NODE_ENV === 'production';
 
-// Global Process Error Handlers
+// Refuse to start with missing or weak secrets: a guessable JWT secret means anyone can log in as anyone.
+for (const key of ['JWT_SECRET', 'REFRESH_TOKEN_SECRET']) {
+    if (!process.env[key] || process.env[key].length < 32) {
+        if (isProd || !process.env[key]) {
+            console.error(`${key} must be set (at least 32 characters). See .env.example.`);
+            process.exit(1);
+        }
+    }
+}
+
 process.on('uncaughtException', (err) => {
-    console.error('UNCAUGHT EXCEPTION! 💥 Shutting down...');
-    console.error(err.name, err.message, err.stack);
+    console.error('UNCAUGHT EXCEPTION, shutting down', err);
     process.exit(1);
 });
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Trust Render's reverse proxy FIRST — must be before rate limiter
+// Render puts one proxy in front of the app; needed for correct client IPs in rate limiting.
 app.set('trust proxy', 1);
+app.disable('x-powered-by');
 
-// Connect to Database
 connectDB();
 
-// CORS — must be FIRST middleware before helmet and everything else
-const allowedOrigins = [
-    'http://localhost:4200',
-    process.env.FRONTEND_URL,
-].filter(Boolean);
+// CORS: in production the frontend is served by this same server, so only
+// the configured FRONTEND_URL (if any) and local development are allowed.
+const allowedOrigins = [process.env.FRONTEND_URL, !isProd && 'http://localhost:4200'].filter(Boolean);
+app.use(cors({
+    origin: (origin, cb) => cb(null, !origin || allowedOrigins.includes(origin)),
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
-const corsOptions = {
-    origin: (origin, callback) => {
-        if (!origin) return callback(null, true);
-
-        const isAllowed =
-            allowedOrigins.includes(origin) ||
-            origin.endsWith('.onrender.com');
-
-        if (isAllowed) {
-            callback(null, true);
-        } else {
-            console.warn(`CORS blocked for origin: ${origin}`);
-            callback(new Error(`CORS: origin ${origin} not allowed`));
+app.use(helmet({
+    contentSecurityPolicy: {
+        useDefaults: true,
+        directives: {
+            'default-src': ["'self'"],
+            'script-src': ["'self'"],
+            'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+            'font-src': ["'self'", 'https://fonts.gstatic.com', 'data:'],
+            'img-src': ["'self'", 'data:', 'blob:', 'https://res.cloudinary.com'],
+            'connect-src': ["'self'", 'https://api.open-meteo.com', 'https://fonts.googleapis.com', 'https://fonts.gstatic.com', 'https://res.cloudinary.com'],
+            'worker-src': ["'self'"],
+            'manifest-src': ["'self'"],
+            'frame-ancestors': ["'none'"],
+            'object-src': ["'none'"],
+            'base-uri': ["'self'"],
+            'form-action': ["'self'"]
         }
     },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'Accept'],
-};
-
-// Handle OPTIONS preflight for ALL routes explicitly
-app.options(/.*/, cors(corsOptions));
-app.use(cors(corsOptions));
-
-// Security & parsing
-app.use(helmet({
-    contentSecurityPolicy: false,
-    crossOriginEmbedderPolicy: false
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: 'same-site' }
 }));
-app.use(express.json());
+app.use(compression());
+app.use(express.json({ limit: '100kb' }));
 app.use(cookieParser());
+app.use(sanitizeBody);
 
-// Rate limiting
+app.get('/health', (req, res) => res.json({ status: 'ok', uptime: Math.round(process.uptime()) }));
+
 app.use('/api', apiLimiter);
+app.use('/api', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
+app.use('/api', apiRoutes);
+app.use('/api', notFound);
 
-// Health check endpoint (no rate limit)
-app.get('/health', (req, res) => {
-    res.json({
-        status: 'ok',
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime()
-    });
-});
-
-// Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/players', playerRoutes);
-app.use('/api/matches', matchRoutes);
-app.use('/api/feedback', feedbackRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/notes', notesRoutes);
-app.use('/api/stats', statsRoutes);
-app.use('/api/polls', pollRoutes);
-
-// Serve Frontend in Production (Render unified deployment)
+// Serve the Angular app (unified deployment on Render).
 const frontendPath = path.join(__dirname, '../frontend/dist/frontend/browser');
-app.use(express.static(frontendPath));
-
-app.use((req, res, next) => {
-    if (req.method === 'GET' && !req.originalUrl.startsWith('/api')) {
-        res.sendFile(path.join(frontendPath, 'index.html'));
-    } else {
-        next();
+app.use(express.static(frontendPath, {
+    index: false,
+    setHeaders: (res, file) => {
+        // Hashed bundles never change; the shell and service worker always revalidate.
+        if (/\.[0-9a-f]{16,}\.(js|css)$/i.test(file) || /[-.][A-Z0-9]{8}\.(js|css)$/.test(file)) {
+            res.set('Cache-Control', 'public, max-age=31536000, immutable');
+        } else {
+            res.set('Cache-Control', 'no-cache');
+        }
     }
-});
+}));
+app.get(/.*/, (req, res) => res.sendFile(path.join(frontendPath, 'index.html')));
 
-// Error handling middlewares
-app.use(notFound);
 app.use(errorHandler);
 
-// Start the server (always — Render sets PORT via env)
 const server = app.listen(PORT, () => {
     console.log(`Server running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
 });
 
 process.on('unhandledRejection', (err) => {
-    console.error('UNHANDLED REJECTION! 💥 Shutting down...');
-    console.error(err.name, err.message, err.stack);
-    server.close(() => {
-        process.exit(1);
-    });
+    console.error('UNHANDLED REJECTION, shutting down', err);
+    server.close(() => process.exit(1));
 });
 
 export default app;

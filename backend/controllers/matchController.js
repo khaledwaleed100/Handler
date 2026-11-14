@@ -1,267 +1,320 @@
 import Match from '../models/Match.js';
 import Player from '../models/Player.js';
-import { balanceTeams } from '../services/balancingService.js';
-import { getAiMvpSuggestion, checkSchedulingConflict } from '../services/aiService.js';
-import { sendMatchCreationEmail } from '../services/emailService.js';
-import { calculateMatchRating } from '../services/ratingService.js';
-import asyncHandler from '../middlewares/asyncHandler.js';
+import PeerRating from '../models/PeerRating.js';
+import Preference from '../models/Preference.js';
+import { getSettings } from '../models/Settings.js';
+import { httpError } from '../utils/httpError.js';
+import * as v from '../utils/validate.js';
+import { isOrganizer } from '../middlewares/authMiddleware.js';
+import { matchListView, matchView, publicPlayer } from '../services/views.js';
+import {
+    checkIn, completeMatch, finalizeDueMatches, finalizeRatings, playersByIds, recentTeams, rsvpLists, setRsvp
+} from '../services/matchService.js';
+import { balanceTeams, MAX_PLAYERS } from '../services/balancingService.js';
+import { notifyEveryone, notifyPlayers } from '../services/pushService.js';
+import { ATTRIBUTES } from '../models/Player.js';
+import { recomputeStandings } from '../services/standingsService.js';
 
-// @desc    Get all matches for a user
-// @route   GET /api/matches
-// @access  Private
-const getMatches = asyncHandler(async (req, res) => {
-    const matches = await Match.find({ userId: req.user.id }).sort({ date: 1 });
-    res.json(matches);
+const viewer = (req) => ({ player: req.player, isOrganizer: isOrganizer(req) });
+
+const loadMatch = async (id) => {
+    v.requireId(id, 'match');
+    const match = await Match.findById(id);
+    if (!match) throw httpError(404, 'Match not found');
+    return match;
+};
+
+const requireUpcoming = (match) => {
+    if (match.status !== 'upcoming') throw httpError(400, 'This match is not upcoming');
+};
+
+const formatKickoff = (d) => new Date(d).toLocaleString('en-GB', {
+    weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: process.env.TZ_DISPLAY || 'Africa/Cairo'
 });
 
-// @desc    Get single match by ID
-// @route   GET /api/matches/:id
-// @access  Private
-const getMatch = asyncHandler(async (req, res) => {
-    const match = await Match.findOne({ _id: req.params.id, userId: req.user.id })
-        .populate('roster')
-        .populate('teamA')
-        .populate('teamB');
+// @route GET /api/matches?scope=upcoming|past
+export const listMatches = async (req, res) => {
+    await finalizeDueMatches();
+    const past = req.query.scope === 'past';
+    const filter = past ? { status: { $in: ['completed', 'cancelled'] } } : { status: 'upcoming' };
+    const matches = await Match.find(filter).sort({ kickoff: past ? -1 : 1 }).limit(past ? 30 : 20);
+    res.json(await matchListView(matches, viewer(req)));
+};
 
-    if (!match) {
-        res.status(404);
-        throw new Error('Match not found');
-    }
-    res.json(match);
-});
+// @route GET /api/matches/:id
+export const getMatch = async (req, res) => {
+    const match = await loadMatch(req.params.id);
+    res.json(await matchView(match, viewer(req)));
+};
 
-// @desc    Create a new match
-// @route   POST /api/matches
-// @access  Private
-const createMatch = asyncHandler(async (req, res) => {
-    const { place, date, time } = req.body;
+const readMatchFields = (b, { partial }) => {
+    const out = {};
+    const place = v.str(b.place, { min: 2, max: 80, field: 'Place', required: !partial });
+    if (place !== undefined) out.place = place;
+    const mapUrl = v.url(b.mapUrl, 'Map link');
+    if (mapUrl !== undefined) out.mapUrl = mapUrl;
+    if (b.kickoff !== undefined || !partial) out.kickoff = v.date(b.kickoff, 'kick-off time');
+    const capacity = v.int(b.capacity, { min: 2, max: MAX_PLAYERS, field: 'Players' });
+    if (capacity !== undefined) out.capacity = capacity;
+    const price = v.int(b.price, { min: 0, max: 100000, field: 'Price' });
+    if (price !== undefined) out.price = price;
+    return out;
+};
 
-    if (!place || !date || !time) {
-        res.status(400);
-        throw new Error('Please add place, date, and time');
-    }
-
-    // AI Feature 4: Scheduling Conflict Detection
-    let conflictWarning = null;
-    if (process.env.GEMINI_API_KEY) {
-        const existingMatches = await Match.find({ userId: req.user.id, status: 'upcoming' });
-        conflictWarning = await checkSchedulingConflict(existingMatches, { date, time, place });
-    }
-
+// @route POST /api/matches  (organizer)
+export const createMatch = async (req, res) => {
+    const settings = await getSettings();
+    const fields = readMatchFields(req.body || {}, { partial: false });
     const match = await Match.create({
-        userId: req.user.id,
-        place,
-        date,
-        time,
-        roster: [],
-        teamA: [],
-        teamB: []
+        capacity: settings.defaultCapacity,
+        price: settings.defaultPrice,
+        ...fields,
+        createdBy: req.user._id
     });
+    notifyEveryone({
+        title: 'New match ⚽',
+        body: `${match.place} · ${formatKickoff(match.kickoff)}. Are you in?`,
+        url: `/matches/${match._id}`
+    }, req.user._id).catch(() => {});
+    res.status(201).json(await matchView(match, viewer(req)));
+};
 
-    // Send notification email to the manager (non-blocking)
-    sendMatchCreationEmail(req.user, match).catch(err =>
-        console.error('Email notification failed (non-critical):', err.message)
-    );
-
-    res.status(201).json({ match, conflictWarning });
-});
-
-// @desc    Update a match (roster or details)
-// @route   PUT /api/matches/:id
-// @access  Private
-const updateMatch = asyncHandler(async (req, res) => {
-    const match = await Match.findOne({ _id: req.params.id, userId: req.user.id });
-
-    if (!match) {
-        res.status(404);
-        throw new Error('Match not found');
+// @route PUT /api/matches/:id  (organizer)  { place, mapUrl, kickoff, capacity, price, cancelled }
+export const updateMatch = async (req, res) => {
+    const match = await loadMatch(req.params.id);
+    const fields = readMatchFields(req.body || {}, { partial: true });
+    Object.assign(match, fields);
+    if (req.body?.cancelled === true && match.status === 'upcoming') {
+        match.status = 'cancelled';
+        notifyPlayers(rsvpLists(match).confirmed, {
+            title: 'Match cancelled',
+            body: `${match.place} · ${formatKickoff(match.kickoff)} is off.`,
+            url: `/matches/${match._id}`
+        }).catch(() => {});
     }
+    await match.save();
+    res.json(await matchView(match, viewer(req)));
+};
 
-    const updatedMatch = await Match.findByIdAndUpdate(
-        req.params.id,
-        req.body,
-        { new: true }
-    ).populate('roster').populate('teamA').populate('teamB');
-
-    res.json(updatedMatch);
-});
-
-// @desc    Delete a match
-// @route   DELETE /api/matches/:id
-// @access  Private
-const deleteMatch = asyncHandler(async (req, res) => {
-    const match = await Match.findOne({ _id: req.params.id, userId: req.user.id });
-
-    if (!match) {
-        res.status(404);
-        throw new Error('Match not found');
-    }
-
+// @route DELETE /api/matches/:id  (organizer)
+export const deleteMatch = async (req, res) => {
+    const match = await loadMatch(req.params.id);
+    await PeerRating.deleteMany({ match: match._id });
+    const wasCompleted = match.status === 'completed';
     await match.deleteOne();
-    res.json({ id: req.params.id });
-});
+    if (wasCompleted) await recomputeStandings({ capChanges: false });
+    res.json({ ok: true });
+};
 
-// @desc    Generate balanced teams from roster
-// @route   POST /api/matches/:id/generate
-// @access  Private
-const generateTeams = asyncHandler(async (req, res) => {
-    const match = await Match.findOne({ _id: req.params.id, userId: req.user.id }).populate('roster');
+const RSVP_STATES = ['in', 'out', 'maybe'];
 
-    if (!match) {
-        res.status(404);
-        throw new Error('Match not found');
+// @route POST /api/matches/:id/rsvp  { status }
+export const rsvp = async (req, res) => {
+    if (!req.player) throw httpError(404, 'Player profile not found');
+    const match = await loadMatch(req.params.id);
+    requireUpcoming(match);
+    if (!RSVP_STATES.includes(req.body?.status)) throw httpError(400, 'Invalid reply');
+    await setRsvp(match, req.player._id, req.body.status);
+    res.json(await matchView(match, viewer(req)));
+};
+
+// @route POST /api/matches/:id/roster  (organizer)  { playerId, status }
+// For friends who reply on WhatsApp instead of in the app.
+export const setRosterStatus = async (req, res) => {
+    const match = await loadMatch(req.params.id);
+    requireUpcoming(match);
+    const playerId = v.requireId(req.body?.playerId, 'player');
+    const status = req.body?.status;
+    if (![...RSVP_STATES, 'remove'].includes(status)) throw httpError(400, 'Invalid reply');
+    if (!(await Player.exists({ _id: playerId }))) throw httpError(404, 'Player not found');
+
+    if (status === 'remove') {
+        match.rsvps = match.rsvps.filter(r => String(r.player) !== playerId);
+        match.teamA = match.teamA.filter(p => String(p) !== playerId);
+        match.teamB = match.teamB.filter(p => String(p) !== playerId);
+        await match.save();
+    } else {
+        await setRsvp(match, playerId, status);
     }
+    res.json(await matchView(match, viewer(req)));
+};
 
-    if (match.roster.length < 2) {
-        res.status(400);
-        throw new Error('Need at least 2 players in roster to generate teams');
-    }
+// @route POST /api/matches/:id/teams/suggest  (organizer)
+// Returns the best 3 splits of the confirmed players.
+export const suggestTeams = async (req, res) => {
+    const match = await loadMatch(req.params.id);
+    requireUpcoming(match);
+    const ids = rsvpLists(match).confirmed;
+    if (ids.length < 2) throw httpError(400, 'Need at least 2 confirmed players');
 
-    const balanced = balanceTeams(match.roster);
+    const players = await playersByIds(ids);
+    const preferences = (await Preference.find({ player: { $in: ids } }).lean())
+        .map(p => ({ from: String(p.player), with: p.with.map(String), avoid: p.avoid.map(String) }));
 
-    match.teamA = balanced.teamA.map(p => p._id);
-    match.teamB = balanced.teamB.map(p => p._id);
+    const options = balanceTeams(
+        players.map(p => ({ id: String(p._id), overall: p.overall, position: p.position })),
+        { preferences, recentTeams: await recentTeams(3), count: 3 }
+    );
+    res.json({ options, players: Object.fromEntries(players.map(p => [String(p._id), publicPlayer(p)])) });
+};
 
+// @route PUT /api/matches/:id/teams  (organizer)  { teamA, teamB, publish }
+export const saveTeams = async (req, res) => {
+    const match = await loadMatch(req.params.id);
+    requireUpcoming(match);
+    const teamA = v.idList(req.body?.teamA ?? [], { max: MAX_PLAYERS, field: 'Team A' });
+    const teamB = v.idList(req.body?.teamB ?? [], { max: MAX_PLAYERS, field: 'Team B' });
+    if (teamA.some(id => teamB.includes(id))) throw httpError(400, 'A player cannot be on both teams');
+
+    const confirmed = new Set(rsvpLists(match).confirmed);
+    if ([...teamA, ...teamB].some(id => !confirmed.has(id))) throw httpError(400, 'Only confirmed players can be in a team');
+
+    const publish = req.body?.publish === true;
+    const wasPublished = match.teamsPublished;
+    match.teamA = teamA;
+    match.teamB = teamB;
+    match.teamsPublished = publish || (wasPublished && req.body?.publish !== false);
     await match.save();
 
-    const updatedMatch = await Match.findById(req.params.id)
-        .populate('roster')
-        .populate('teamA')
-        .populate('teamB');
-
-    res.json(updatedMatch);
-});
-
-// @desc    Complete a match and save stats
-// @route   POST /api/matches/:id/complete
-// @access  Private
-const completeMatch = asyncHandler(async (req, res) => {
-    let { playerStats } = req.body;
-    playerStats = playerStats || [];
-
-    const match = await Match.findOne({ _id: req.params.id, userId: req.user.id });
-    if (!match) {
-        res.status(404);
-        throw new Error('Match not found');
+    if (publish && !wasPublished) {
+        notifyPlayers([...teamA, ...teamB], {
+            title: 'Teams are out 👕',
+            body: `See your team for ${match.place}.`,
+            url: `/matches/${match._id}`
+        }).catch(() => {});
     }
+    res.json(await matchView(match, viewer(req)));
+};
 
-    const isAlreadyCompleted = match.status === 'completed';
+// @route POST /api/matches/:id/checkin  (organizer)  { playerId, state: arrived|no_show|clear, arrivedAt? }
+export const checkInPlayer = async (req, res) => {
+    const match = await loadMatch(req.params.id);
+    if (match.status === 'cancelled') throw httpError(400, 'Match was cancelled');
+    const playerId = v.requireId(req.body?.playerId, 'player');
+    const state = req.body?.state;
+    if (!['arrived', 'no_show', 'clear'].includes(state)) throw httpError(400, 'Invalid check-in');
+    const arrivedAt = req.body?.arrivedAt ? v.date(req.body.arrivedAt, 'arrival time') : new Date();
 
-    // 1. Auto-calculate final score based on player goals
-    let teamAGoals = 0;
-    let teamBGoals = 0;
+    const inMatch = rsvpLists(match).confirmed.includes(playerId) ||
+        [...match.teamA, ...match.teamB].some(p => String(p) === playerId);
+    if (!inMatch) throw httpError(400, 'That player is not in this match');
 
-    const teamAIds = match.teamA.map(id => id.toString());
-    const teamBIds = match.teamB.map(id => id.toString());
+    await checkIn(match, playerId, state, arrivedAt);
+    res.json(await matchView(match, viewer(req)));
+};
 
-    for (const stat of playerStats) {
-        const pid = stat.playerId?.toString();
-        const goals = stat.goals || 0;
-        if (teamAIds.includes(pid)) teamAGoals += goals;
-        else if (teamBIds.includes(pid)) teamBGoals += goals;
-    }
+// @route POST /api/matches/:id/result  (organizer)  { score: {a,b}, stats: [{player, goals, assists}] }
+export const saveResult = async (req, res) => {
+    const match = await loadMatch(req.params.id);
+    if (match.status === 'cancelled') throw httpError(400, 'Match was cancelled');
+    if (!match.teamA.length || !match.teamB.length) throw httpError(400, 'Set the teams before entering a result');
 
-    match.finalScore = { teamA: teamAGoals, teamB: teamBGoals };
-    match.status = 'completed';
+    const score = {
+        a: v.int(req.body?.score?.a, { min: 0, max: 99, field: 'Score', required: true }),
+        b: v.int(req.body?.score?.b, { min: 0, max: 99, field: 'Score', required: true })
+    };
+    const inTeams = new Set([...match.teamA, ...match.teamB].map(String));
+    const rawStats = Array.isArray(req.body?.stats) ? req.body.stats : [];
+    if (rawStats.length > MAX_PLAYERS) throw httpError(400, 'Too many entries');
+    const stats = rawStats.map(s => {
+        const player = v.requireId(s?.player, 'player');
+        if (!inTeams.has(player)) throw httpError(400, 'Stats can only be entered for players in the teams');
+        return {
+            player,
+            goals: v.int(s.goals ?? 0, { min: 0, max: 50, field: 'Goals' }),
+            assists: v.int(s.assists ?? 0, { min: 0, max: 50, field: 'Assists' })
+        };
+    }).filter(s => s.goals || s.assists);
 
-    // 2. Undo previous stats if modifying an already completed match
-    if (isAlreadyCompleted && match.playerStats?.length > 0) {
-        for (const oldStat of match.playerStats) {
-            const player = await Player.findById(oldStat.playerId);
-            if (player) {
-                // Subtract old stats safely
-                player.stats.matchesPlayed = Math.max(0, (player.stats.matchesPlayed || 1) - 1);
-                player.stats.goals = Math.max(0, (player.stats.goals || 0) - (oldStat.goals || 0));
-                player.stats.assists = Math.max(0, (player.stats.assists || 0) - (oldStat.assists || 0));
-                if (oldStat.isMvp) {
-                    player.stats.mvpAwards = Math.max(0, (player.stats.mvpAwards || 1) - 1);
-                }
+    await completeMatch(match, { score, stats });
+    res.json(await matchView(match, viewer(req)));
+};
 
-                // Remove the old goals from recentGoals array (remove last occurrence)
-                if (player.recentGoals && player.recentGoals.length > 0) {
-                    const idx = player.recentGoals.lastIndexOf(oldStat.goals || 0);
-                    if (idx !== -1) {
-                        player.recentGoals.splice(idx, 1);
-                    }
-                }
-                await player.save();
-            }
-        }
-    }
-
-    // Calculate match ratings before saving
-    for (const stat of playerStats) {
-        stat.matchRating = calculateMatchRating(stat);
-    }
-
-    match.playerStats = playerStats;
-
-    // AI Feature 3: Automated MVP Suggestion
-    const mvpAlreadySet = playerStats.some(s => s.isMvp);
-    if (!mvpAlreadySet && playerStats.length > 0 && process.env.GEMINI_API_KEY) {
-        try {
-            const playerIds = playerStats.map(s => s.playerId);
-            const players = await Player.find({ _id: { $in: playerIds } });
-            const suggestion = await getAiMvpSuggestion(playerStats, players);
-            match.aiMvpSuggestion = suggestion;
-        } catch (err) {
-            console.error('AI MVP suggestion failed (non-critical):', err.message);
-        }
-    }
-
+// @route POST /api/matches/:id/payments  (organizer)  { playerId, paid }
+export const setPayment = async (req, res) => {
+    const match = await loadMatch(req.params.id);
+    const playerId = v.requireId(req.body?.playerId, 'player');
+    const paid = v.bool(req.body?.paid, 'paid');
+    match.payments = match.payments.filter(p => String(p.player) !== playerId);
+    match.payments.push({ player: playerId, paid, at: new Date() });
     await match.save();
+    res.json(await matchView(match, viewer(req)));
+};
 
-    // 3. Apply new stats
-    if (playerStats && playerStats.length > 0) {
-        for (const stat of playerStats) {
-            const player = await Player.findById(stat.playerId);
-            if (player) {
-                player.stats.matchesPlayed = (player.stats.matchesPlayed || 0) + 1;
-                player.stats.goals = (player.stats.goals || 0) + (stat.goals || 0);
-                player.stats.assists = (player.stats.assists || 0) + (stat.assists || 0);
-                if (stat.isMvp) {
-                    player.stats.mvpAwards = (player.stats.mvpAwards || 0) + 1;
-                }
+// @route GET /api/matches/:id/rating-task  — who I should rate, plus everyone for the MVP vote
+export const getRatingTask = async (req, res) => {
+    const match = await loadMatch(req.params.id);
+    if (match.status !== 'completed') throw httpError(400, 'The match has not finished');
+    const me = String(req.player?._id);
+    const task = match.ratingAssignments.find(a => String(a.rater) === me);
+    if (!task) throw httpError(404, 'You have nothing to rate for this match');
 
-                // Track recent goals for trend (keep last 5 matches)
-                const recentGoals = [...(player.recentGoals || []), stat.goals || 0].slice(-5);
-                player.recentGoals = recentGoals;
+    const everyone = await playersByIds([...match.teamA, ...match.teamB].map(String).filter(id => id !== me));
+    res.json({
+        matchId: String(match._id),
+        place: match.place,
+        kickoff: match.kickoff,
+        done: task.done,
+        closed: match.ratingsFinalized,
+        closesAt: match.ratingsClosesAt,
+        ratees: task.ratees.map(String),
+        players: Object.fromEntries(everyone.map(p => [String(p._id), publicPlayer(p)]))
+    });
+};
 
-                // Performance trend logic
-                if (recentGoals.length >= 3) {
-                    const last3 = recentGoals.slice(-3);
-                    const totalRecent = last3.reduce((a, b) => a + b, 0);
-                    if (last3.every(g => g > 0)) {
-                        player.performanceTrend = 'hot';
-                    } else if (totalRecent === 0 && recentGoals.length >= 3) {
-                        player.performanceTrend = 'cold';
-                    } else {
-                        player.performanceTrend = 'stable';
-                    }
-                } else {
-                    player.performanceTrend = 'stable';
-                }
+// @route POST /api/matches/:id/ratings  { ratings: [{ratee, scores, playAgain}], mvp }
+export const submitRatings = async (req, res) => {
+    const match = await loadMatch(req.params.id);
+    if (match.status !== 'completed' || match.ratingsFinalized) throw httpError(400, 'Rating for this match is closed');
+    const me = String(req.player?._id);
+    const task = match.ratingAssignments.find(a => String(a.rater) === me);
+    if (!task) throw httpError(403, 'You have nothing to rate for this match');
+    if (task.done) throw httpError(409, 'You already rated this match');
 
-                await player.save();
-            }
+    const assigned = new Set(task.ratees.map(String));
+    const list = Array.isArray(req.body?.ratings) ? req.body.ratings : [];
+    if (list.length !== assigned.size) throw httpError(400, 'Please rate every player on the list');
+
+    const docs = list.map(r => {
+        const ratee = v.requireId(r?.ratee, 'player');
+        if (!assigned.has(ratee)) throw httpError(400, 'You can only rate the players you were given');
+        // Goalkeeping is optional: most people never see a teammate in goal.
+        const scores = {};
+        for (const a of ATTRIBUTES) {
+            const val = v.int(r.scores?.[a], { min: 1, max: 5, field: a, required: a !== 'goalkeeping' });
+            if (val !== undefined) scores[a] = val;
         }
+        return { match: match._id, rater: me, ratee, scores, playAgain: v.bool(r.playAgain, 'Play again') };
+    });
+    if (new Set(docs.map(d => String(d.ratee))).size !== docs.length) throw httpError(400, 'Duplicate player');
+
+    const playedIds = new Set([...match.teamA, ...match.teamB].map(String));
+    let mvp = null;
+    if (req.body?.mvp !== undefined && req.body.mvp !== null) {
+        mvp = v.requireId(req.body.mvp, 'MVP');
+        if (!playedIds.has(mvp) || mvp === me) throw httpError(400, 'Pick an MVP who played (not yourself)');
     }
 
-    const updatedMatch = await Match.findById(req.params.id)
-        .populate('roster')
-        .populate('teamA')
-        .populate('teamB')
-        .populate('playerStats.playerId');
+    // Mark done first (atomically) so a double-tap can't submit twice.
+    const marked = await Match.updateOne(
+        { _id: match._id, ratingAssignments: { $elemMatch: { rater: me, done: false } } },
+        { $set: { 'ratingAssignments.$.done': true }, ...(mvp ? { $push: { mvpVotes: { voter: me, for: mvp } } } : {}) }
+    );
+    if (!marked.modifiedCount) throw httpError(409, 'You already rated this match');
 
-    res.json(updatedMatch);
-});
+    await PeerRating.insertMany(docs);
 
-export {
-    getMatches,
-    getMatch,
-    createMatch,
-    updateMatch,
-    deleteMatch,
-    generateTeams,
-    completeMatch
+    // Everyone has rated: no need to wait for the window to close.
+    const fresh = await Match.findById(match._id);
+    if (fresh.ratingAssignments.every(a => a.done)) await finalizeRatings(fresh);
+
+    res.json({ ok: true });
+};
+
+// @route POST /api/matches/:id/finalize-ratings  (organizer) — close the rating round now
+export const closeRatings = async (req, res) => {
+    const match = await loadMatch(req.params.id);
+    if (match.status !== 'completed') throw httpError(400, 'The match has not finished');
+    await finalizeRatings(match);
+    res.json(await matchView(match, viewer(req)));
 };

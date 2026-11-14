@@ -1,33 +1,39 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 
-const apiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per windowMs
-    message: 'Too many requests from this IP, please try again after 15 minutes',
-    standardHeaders: true,
-    legacyHeaders: false,
-    skip: (req) => {
-        // Don't rate limit on /health check.
-        // Polls are limited separately: friends voting from the same venue Wi-Fi share one IP
-        // and phones refresh an open poll, which would otherwise burn the shared 100/15min budget.
-        return req.path === '/health' || req.path.startsWith('/polls');
-    },
+const json = (message) => ({ message });
+const base = { standardHeaders: 'draft-7', legacyHeaders: false };
+
+// General API budget. Friends on the same Wi-Fi share one IP, so it is generous.
+export const apiLimiter = rateLimit({
+    ...base,
+    windowMs: 15 * 60 * 1000,
+    limit: 600,
+    message: json('Too many requests, please slow down.'),
+    skip: (req) => req.path.startsWith('/polls')
 });
 
-const pollLimiter = rateLimit({
-    windowMs: 60 * 1000, // 1 minute
-    max: 120, // ~ a dozen phones on one Wi-Fi, each refreshing every 20-30s plus votes
-    message: { message: 'Too many poll requests, slow down for a moment.' },
-    standardHeaders: true,
-    legacyHeaders: false,
+// Polls are refreshed live while the vote screen is open.
+export const pollLimiter = rateLimit({
+    ...base,
+    windowMs: 60 * 1000,
+    limit: 120,
+    message: json('Too many poll requests, slow down for a moment.')
 });
 
-const authLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000, // 1 hour
-    max: 10, // Limit each IP to 10 login requests per windowMs
-    message: 'Too many login attempts from this IP, please try again after an hour',
-    standardHeaders: true,
-    legacyHeaders: false,
+// Login / sign-up: keyed per IP + email, so one person guessing passwords
+// gets blocked without locking out everyone else on the same Wi-Fi.
+export const authLimiter = rateLimit({
+    ...base,
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    keyGenerator: (req) => `${ipKeyGenerator(req.ip)}|${String(req.body?.email || '').toLowerCase()}`,
+    message: json('Too many attempts. Try again in 15 minutes.')
 });
 
-export { apiLimiter, authLimiter, pollLimiter };
+// Password reset codes and invite-code checks: strict, to stop guessing.
+export const strictLimiter = rateLimit({
+    ...base,
+    windowMs: 60 * 60 * 1000,
+    limit: 10,
+    message: json('Too many attempts. Try again later.')
+});

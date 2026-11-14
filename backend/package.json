@@ -6,9 +6,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "seed-admin": "node seedAdmin.js",
     "build": "cd ../frontend && npm install --include=dev --legacy-peer-deps && npm run build",
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --forceExit"
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --forceExit",
+    "reset-data": "node scripts/resetData.js"
   },
   "keywords": [],
   "author": "",
@@ -17,6 +17,7 @@
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "cloudinary": "^2.6.1",
+    "compression": "^1.8.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
@@ -26,7 +27,8 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.5.0",
     "multer": "^2.0.1",
-    "nodemailer": "^9.0.5"
+    "nodemailer": "^9.0.5",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "jest": "^30.0.4",
