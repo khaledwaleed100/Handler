@@ -1,14 +1,17 @@
 import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
 import { I18n } from '../../core/i18n/i18n.service';
+import { ThemeToggleComponent } from '../../shared/ui/theme-toggle.component';
 
 /** Shared frame for sign-in screens: logo, title, language switch. */
 @Component({
   selector: 'app-auth-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [ThemeToggleComponent],
   template: `
     <div class="mx-auto flex min-h-dvh w-full max-w-md flex-col px-5"
          style="padding-top: calc(env(safe-area-inset-top) + 1rem); padding-bottom: calc(env(safe-area-inset-bottom) + 1.5rem)">
-      <div class="flex justify-end">
+      <div class="flex items-center justify-end gap-2">
+        <app-theme-toggle />
         <button class="btn btn-sm btn-ghost" (click)="i18n.set(i18n.lang() === 'ar' ? 'en' : 'ar')">
           {{ i18n.lang() === 'ar' ? 'English' : 'العربية' }}
         </button>

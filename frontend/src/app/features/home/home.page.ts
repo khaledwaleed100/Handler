@@ -9,12 +9,13 @@ import { PollService } from '../../core/services/poll.service';
 import { RsvpCardComponent } from '../../shared/ui/rsvp-card.component';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { AvatarComponent } from '../../shared/ui/avatar.component';
+import { ThemeToggleComponent } from '../../shared/ui/theme-toggle.component';
 
 /** Home answers one question: "what do I need to do?" */
 @Component({
   selector: 'app-home',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, TPipe, RsvpCardComponent, IconComponent, AvatarComponent],
+  imports: [RouterLink, TPipe, RsvpCardComponent, IconComponent, AvatarComponent, ThemeToggleComponent],
   template: `
     <div class="page">
       <header class="mb-5 flex items-center gap-3">
@@ -25,6 +26,7 @@ import { AvatarComponent } from '../../shared/ui/avatar.component';
           <div class="text-xs font-bold uppercase tracking-wider muted">{{ home()?.groupName }}</div>
           <h1 class="truncate text-xl font-black">{{ 'home.hello' | t: { name: firstName() } }} 👋</h1>
         </div>
+        <app-theme-toggle />
         @if (auth.isOrganizer()) {
           <a routerLink="/me" class="icon-btn" [attr.aria-label]="'nav.me' | t"><app-icon name="user" /></a>
         }

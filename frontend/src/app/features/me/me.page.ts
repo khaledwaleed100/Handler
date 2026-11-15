@@ -163,8 +163,7 @@ export class MePage implements OnInit {
   }
 
   setTheme(t: Theme) {
-    this.theme.set(t);
-    this.api.updateMe({ theme: t }).then(me => this.auth.applyMe(me)).catch(() => {});
+    this.theme.set(t); // also saved to the account
   }
 
   async toggleEmails() {
