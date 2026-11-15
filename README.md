@@ -63,7 +63,7 @@ backend/
   services/      ratingService (rating maths), balancingService (team-maker),
                  standingsService (recomputes everyone from match history),
                  matchService (replies, waitlist, results, rating rounds), views (privacy), push, email
-  controllers/   auth, me, matches, organizer, polls, cron
+  controllers/   auth (incl. Google), me, matches, organizer, polls
   routes/index.js   every route and who may call it, in one file
   tests/         unit tests + end-to-end API test
 frontend/src/app/
