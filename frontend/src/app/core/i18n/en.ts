@@ -1,6 +1,6 @@
 /** English strings. Keys are grouped by screen. `{name}` placeholders are filled by the t pipe. */
 export const en = {
-  app: { name: '5-a-side', waking: 'Waking the server up…', offline: 'You are offline', retry: 'Try again', loading: 'Loading…', save: 'Save', saved: 'Saved', cancel: 'Cancel', close: 'Close', back: 'Back', next: 'Next', done: 'Done', delete: 'Delete', edit: 'Edit', yes: 'Yes', no: 'No', or: 'or', optional: 'optional', copy: 'Copy', copied: 'Copied', share: 'Share', error: 'Something went wrong', confirm: 'Are you sure?' },
+  app: { name: 'The Handler', waking: 'Waking the server up…', offline: 'You are offline', retry: 'Try again', loading: 'Loading…', save: 'Save', saved: 'Saved', cancel: 'Cancel', close: 'Close', back: 'Back', next: 'Next', done: 'Done', delete: 'Delete', edit: 'Edit', yes: 'Yes', no: 'No', or: 'or', optional: 'optional', copy: 'Copy', copied: 'Copied', share: 'Share', error: 'Something went wrong', confirm: 'Are you sure?' },
   nav: { home: 'Home', matches: 'Matches', squad: 'Squad', vote: 'Vote', me: 'Me', organizer: 'Organizer' },
   pos: { GK: 'Goalkeeper', DEF: 'Defender', MID: 'Midfielder', FWD: 'Forward', short_GK: 'GK', short_DEF: 'DEF', short_MID: 'MID', short_FWD: 'FWD' },
   attr: { pace: 'Pace', attack: 'Attack', passing: 'Passing', defence: 'Defence', physical: 'Physical', goalkeeping: 'Goalkeeping', short_pace: 'PAC', short_attack: 'ATT', short_passing: 'PAS', short_defence: 'DEF', short_physical: 'PHY', short_goalkeeping: 'GK' },
@@ -8,6 +8,7 @@ export const en = {
   card: { provisional: 'Provisional', provisionalHint: 'Not enough ratings yet', matches: 'Matches', goals: 'Goals', assists: 'Assists', wins: 'Wins', mvps: 'MVPs', form: 'Form', formerPlayer: 'Former player' },
 
   auth: {
+    googleAs: 'Signed in with Google as {email}', setupCode: 'Organizer setup code', setupCodeHint: 'The ORGANIZER_SETUP_CODE you set on the server. Not needed with Google.',
     welcome: 'Welcome back', signIn: 'Sign in', signingIn: 'Signing in…', email: 'Email', password: 'Password', forgot: 'Forgot password?',
     noAccount: 'No account? Ask the organizer for the invite link.', join: 'Join {group}', joinTitle: 'Create your player',
     invalidInvite: 'This invite link is not valid any more. Ask the organizer for a new one.', checkingInvite: 'Checking your invite…',
@@ -30,6 +31,7 @@ export const en = {
   },
 
   match: {
+    notifyTitle: 'Notify the group', notifyAsk: 'Ask who\'s in', notifyAskHint: 'Everyone who hasn\'t answered yet', notifySoon: 'Kick-off soon', notifySoonHint: 'Confirmed players', notifyMessage: 'Send a message', notifyMessageHint: 'Everyone in the match', notifyPlaceholder: 'Your message…', notifySend: 'Send', notifySent: 'Sent to {n} people', notifyLast: 'Last sent {t} ago', notifyHow: 'Arrives as a phone notification and an email.', notifyWhatsapp: 'Post in the WhatsApp group', seen: 'Seen', notSeen: 'Not seen', noReplyTitle: 'Not answered yet',
     upcoming: 'Upcoming', past: 'Past', newMatch: 'New match', place: 'Place', mapLink: 'Map link', date: 'Date', time: 'Kick-off', capacity: 'Players', price: 'Price per player',
     create: 'Create match', creating: 'Creating…', created: 'Match created. Everyone has been notified.', none: 'No matches here yet', cancelled: 'Cancelled', completed: 'Full time',
     addToCalendar: 'Add to calendar', directions: 'Directions', shareInvite: 'Share on WhatsApp', confirmed: 'Confirmed', waitlist: 'Waitlist', maybe: 'Maybe', out: 'Out', noReply: 'No reply yet',
@@ -58,6 +60,7 @@ export const en = {
   squad: { title: 'Squad', search: 'Search players', all: 'All', sortOverall: 'Rating', sortGoals: 'Goals', sortName: 'Name', empty: 'No players found', recent: 'Recent matches', noRecent: 'No matches yet' },
 
   me: {
+    emails: 'Emails', emailsHint: 'Important updates by email too', setPassword: 'Add a password', deleteConfirmEmail: 'Type your email to delete your account',
     title: 'Me', ratingHow: 'How your rating is made', fromSelf: 'Your self-rating', fromPeers: 'Teammates ({n} people)', fromResults: 'Results', peersPending: 'Shown once 4 different people have rated you',
     adjustment: 'Organizer adjustment: {n}', punctuality: 'Punctuality', onTimeOf: 'On time {a} of last {b}', lateDrops: '{n} late drop-outs', noRecord: 'No check-ins yet',
     dispute: 'This is wrong', disputeNote: 'What happened?', sendDispute: 'Send to organizer', pending: 'Waiting for organizer', accepted: 'Corrected ✅', rejected: 'Kept by organizer',
@@ -71,6 +74,7 @@ export const en = {
   },
 
   org: {
+    usage: 'App usage', usageHint: 'Last {n} matches. Counts only, never anyone\'s answers.', active7: 'Active this week', active30: 'Active this month', pushOn: 'Notifications on', replyRate: 'Reply to matches', seenRate: 'Open the match', ratingRate: 'Finish ratings', pollTurnout: 'Vote in polls', lastSeen: 'Active {t} ago', neverSeen: 'Not active yet', repliedOf: 'Replied to {a} of the last {b} matches', google: 'Google',
     title: 'Organizer', invite: 'Invite link', inviteHint: 'Anyone with this link can join. Reset it if it leaks.', resetInvite: 'Reset link', resetConfirm: 'The old link will stop working. Continue?',
     inviteMessage: 'Join our 5-a-side group: {link}',
     settings: 'Group settings', groupName: 'Group name', grace: 'Grace period before "late" (minutes)', defaultCapacity: 'Default players per match', defaultPrice: 'Default price per player', currency: 'Currency', ratingWindow: 'Rating round length (hours)',

@@ -17,12 +17,12 @@ const PASSWORD = 'secret123';
 const SELF = { pace: 70, attack: 70, passing: 70, defence: 70, physical: 70, goalkeeping: 40 };
 const auth = (key) => ({ Authorization: `Bearer ${people[key].token}` });
 
-const signUp = async (key, { position = 'MID', invite = inviteCode, selfRating = SELF } = {}) => {
+const signUp = async (key, { position = 'MID', invite = inviteCode, selfRating = SELF, setupCode } = {}) => {
     const email = `${key}@test.dev`;
     const agent = request.agent(app);
     const res = await agent.post('/api/auth/register').send({
         email, password: PASSWORD, name: key, phone: '+20 100 000 0000', position, selfRating,
-        consent: true, inviteCode: invite
+        consent: true, inviteCode: invite, setupCode
     });
     if (res.status === 201) people[key] = { token: res.body.accessToken, playerId: res.body.player._id, email, agent };
     return res;
@@ -34,7 +34,7 @@ beforeAll(async () => {
     process.env.JWT_SECRET = 'test-secret-test-secret-test-secret-1';
     process.env.REFRESH_TOKEN_SECRET = 'test-refresh-test-refresh-test-refresh-1';
     process.env.ORGANIZER_EMAIL = 'boss@test.dev';
-    process.env.CRON_SECRET = 'cron-secret-cron-secret';
+    process.env.ORGANIZER_SETUP_CODE = 'setup-code-1234';
     process.env.PORT = '0';
     app = (await import('../server.js')).default;
     await mongoose.connection.asPromise();
@@ -46,8 +46,13 @@ afterAll(async () => {
 });
 
 describe('Joining the group', () => {
-    it('lets the organizer email sign up without an invite', async () => {
-        const res = await signUp('boss', { invite: undefined });
+    it('refuses the organizer email without the setup code (stops someone grabbing it)', async () => {
+        const res = await signUp('boss', { invite: undefined, setupCode: 'guess' });
+        expect(res.status).toBe(403);
+    });
+
+    it('lets the organizer email sign up with the setup code', async () => {
+        const res = await signUp('boss', { invite: undefined, setupCode: 'setup-code-1234' });
         expect(res.status).toBe(201);
         expect(res.body.user.role).toBe('organizer');
     });
@@ -99,6 +104,14 @@ describe('Security basics', () => {
         expect(a.body.message).toBe(b.body.message);
     });
 
+    it('locks an account after 10 wrong passwords', async () => {
+        for (let i = 0; i < 10; i++) {
+            await request(app).post('/api/auth/login').set('X-Forwarded-For', `10.0.0.${i}`).send({ email: 'p6@test.dev', password: `wrong${i}pass` });
+        }
+        const locked = await request(app).post('/api/auth/login').set('X-Forwarded-For', '10.0.1.1').send({ email: 'p6@test.dev', password: PASSWORD });
+        expect(locked.status).toBe(429);
+    });
+
     it('keeps people signed in with the refresh cookie, and rotates it', async () => {
         const first = await people.p1.agent.post('/api/auth/refresh');
         expect(first.status).toBe(200);
@@ -137,7 +150,7 @@ describe('Match week', () => {
     it('organizer creates a match', async () => {
         const kickoff = new Date(Date.now() + 2 * 3600 * 1000).toISOString();
         const res = await request(app).post('/api/matches').set(auth('boss'))
-            .send({ place: 'The Cage', kickoff, capacity: 10, price: 50, mapUrl: 'https://maps.google.com/?q=cage' });
+            .send({ place: 'The Cage', kickoff, capacity: 10, mapUrl: 'https://maps.google.com/?q=cage' });
         expect(res.status).toBe(201);
         matchId = res.body._id;
     });
@@ -194,6 +207,23 @@ describe('Match week', () => {
         const pub = await request(app).put(`/api/matches/${matchId}/teams`).set(auth('boss')).send({ teamA: best.teamA, teamB: best.teamB, publish: true });
         expect(pub.status).toBe(200);
         expect((await request(app).get(`/api/matches/${matchId}`).set(auth('p1'))).body.teamA).toHaveLength(5);
+    });
+
+    it('shows the organizer who has seen the match, not members', async () => {
+        await request(app).get(`/api/matches/${matchId}`).set(auth('p7'));
+        const org = await request(app).get(`/api/matches/${matchId}`).set(auth('boss'));
+        expect(org.body.seen).toContain(people.p7.playerId);
+        const member = await request(app).get(`/api/matches/${matchId}`).set(auth('p7'));
+        expect(member.body.seen).toBeUndefined();
+    });
+
+    it('lets only the organizer notify the group, and not twice in 30 minutes', async () => {
+        expect((await request(app).post(`/api/matches/${matchId}/notify`).set(auth('p1')).send({ kind: 'soon' })).status).toBe(403);
+        const first = await request(app).post(`/api/matches/${matchId}/notify`).set(auth('boss')).send({ kind: 'soon' });
+        expect(first.status).toBe(200);
+        expect(first.body.recipients).toBe(9); // everyone confirmed except the organizer
+        expect((await request(app).post(`/api/matches/${matchId}/notify`).set(auth('boss')).send({ kind: 'soon' })).status).toBe(429);
+        expect((await request(app).post(`/api/matches/${matchId}/notify`).set(auth('boss')).send({ kind: 'message' })).status).toBe(400);
     });
 
     it('refuses teams with players who are not confirmed', async () => {
@@ -336,12 +366,29 @@ describe('Polls', () => {
     });
 });
 
-describe('Cron and account deletion', () => {
-    it('cron needs the secret', async () => {
-        expect((await request(app).post('/api/cron/tick')).status).toBe(401);
-        expect((await request(app).post('/api/cron/tick').set('x-cron-secret', 'cron-secret-cron-secret')).status).toBe(200);
+describe('Usage stats and Google sign-in', () => {
+    it('gives the organizer usage numbers without anyone\'s answers', async () => {
+        const res = await request(app).get('/api/organizer/overview').set(auth('boss'));
+        expect(res.body.stats.members).toBe(11);
+        expect(res.body.stats.active7).toBeGreaterThan(0);
+        const p1 = res.body.members.find(m => m._id === people.p1.playerId);
+        expect(p1.usage.replies).toBe(1);
+        expect(JSON.stringify(res.body)).not.toMatch(/playAgain|mvpVotes|"avoid"/);
     });
 
+    it('reports Google sign-in as not set up without a client id', async () => {
+        expect((await request(app).get('/api/config')).body.googleClientId).toBeNull();
+        expect((await request(app).post('/api/auth/google').send({ credential: 'x' })).status).toBe(503);
+    });
+
+    it('rejects a forged Google sign-up token', async () => {
+        const res = await request(app).post('/api/auth/google/complete')
+            .send({ signupToken: 'forged', phone: '+201000000000', position: 'MID', consent: true });
+        expect(res.status).toBe(400);
+    });
+});
+
+describe('Account deletion', () => {
     it('deletes an account and everything personal about it', async () => {
         expect((await request(app).delete('/api/me').set(auth('p9')).send({ password: 'wrong' })).status).toBe(400);
         expect((await request(app).delete('/api/me').set(auth('p9')).send({ password: PASSWORD })).status).toBe(200);

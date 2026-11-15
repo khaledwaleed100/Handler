@@ -36,7 +36,7 @@ import { AvatarComponent } from '../../shared/ui/avatar.component';
       } @else if (home(); as h) {
         <h2 class="section-title !mt-0">{{ 'home.nextMatch' | t }}</h2>
         @if (h.next) {
-          <app-rsvp-card [match]="h.next" [currency]="h.currency" (changed)="onRsvp($event)" />
+          <app-rsvp-card [match]="h.next" (changed)="onRsvp($event)" />
         } @else {
           <div class="card card-pad text-center">
             <div class="text-4xl">🏟️</div>
@@ -65,12 +65,6 @@ import { AvatarComponent } from '../../shared/ui/avatar.component';
               <span class="flex h-11 w-11 items-center justify-center rounded-xl text-xl" style="background: rgba(245,158,11,.15)">🏆</span>
               <span class="flex-1 font-bold">{{ 'home.pollOpen' | t }}</span>
               <app-icon name="chevron" class="muted" />
-            </a>
-          }
-          @for (u of h.todo.unpaid; track u.matchId) {
-            <a class="card card-pad flex items-center gap-3 rise" [routerLink]="['/matches', u.matchId]">
-              <span class="flex h-11 w-11 items-center justify-center rounded-xl text-xl" style="background: rgba(220,38,38,.12)">💸</span>
-              <span class="flex-1 font-bold">{{ 'home.pay' | t: { amount: i18n.money(u.price, h.currency), place: u.place } }}</span>
             </a>
           }
           @for (n of h.todo.needResult || []; track n.matchId) {
@@ -112,7 +106,7 @@ export class HomePage implements OnInit {
   firstName = computed(() => (this.auth.user()?.name || '').split(' ')[0]);
   nothingToDo = computed(() => {
     const t = this.home()?.todo;
-    return !!t && !t.rate.length && !t.unpaid.length && !t.disputes && !(t.needResult?.length) && this.polls.pendingVotes() === 0;
+    return !!t && !t.rate.length && !t.disputes && !(t.needResult?.length) && this.polls.pendingVotes() === 0;
   });
 
   ngOnInit() {

@@ -6,7 +6,6 @@ import * as me from '../controllers/meController.js';
 import * as matches from '../controllers/matchController.js';
 import * as org from '../controllers/organizerController.js';
 import * as polls from '../controllers/pollController.js';
-import { tick } from '../controllers/cronController.js';
 
 /**
  * Every API route in one place, so access rules are easy to review:
@@ -21,11 +20,13 @@ const router = Router();
 router.get('/auth/invite/:code', strictLimiter, auth.checkInvite);
 router.post('/auth/register', authLimiter, auth.register);
 router.post('/auth/login', authLimiter, auth.login);
+router.post('/auth/google', authLimiter, auth.googleSignIn);
+router.post('/auth/google/complete', authLimiter, auth.googleComplete);
+router.get('/config', auth.publicConfig);
 router.post('/auth/refresh', auth.refresh);
 router.post('/auth/logout', auth.logout);
 router.post('/auth/forgot', strictLimiter, auth.forgotPassword);
 router.post('/auth/reset', strictLimiter, auth.resetPassword);
-router.post('/cron/tick', tick);
 
 // ── Members ─────────────────────────────────────────────
 router.use(protect);
@@ -68,7 +69,7 @@ router.post('/matches/:id/teams/suggest', organizerOnly, matches.suggestTeams);
 router.put('/matches/:id/teams', organizerOnly, matches.saveTeams);
 router.post('/matches/:id/checkin', organizerOnly, matches.checkInPlayer);
 router.post('/matches/:id/result', organizerOnly, matches.saveResult);
-router.post('/matches/:id/payments', organizerOnly, matches.setPayment);
+router.post('/matches/:id/notify', organizerOnly, matches.notifyGroup);
 router.post('/matches/:id/finalize-ratings', organizerOnly, matches.closeRatings);
 
 router.post('/polls/generate', organizerOnly, polls.generatePoll);

@@ -1,8 +1,8 @@
 {
-  "name": "5-a-side",
-  "short_name": "5-a-side",
-  "theme_color": "#07110c",
-  "background_color": "#07110c",
+  "name": "The Handler",
+  "short_name": "The Handler",
+  "theme_color": "#0e2219",
+  "background_color": "#0e2219",
   "display": "standalone",
   "scope": "/",
   "start_url": "/home",
@@ -54,9 +54,15 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
+    },
+    {
+      "src": "assets/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
-  "description": "Your group's 5-a-side matches, teams and ratings",
+  "description": "Your 5-a-side group: matches, fair teams and honest ratings",
   "orientation": "portrait",
   "categories": [
     "sports"

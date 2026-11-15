@@ -22,6 +22,20 @@
       <p class="hint">{{ 'org.inviteHint' | t }}</p>
     </div>
 
+    <!-- Usage -->
+    <h2 class="section-title">{{ 'org.usage' | t }}</h2>
+    <div class="card card-pad">
+      <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        @for (tile of statTiles(); track tile.label) {
+          <div class="sunk px-3 py-2.5">
+            <div class="text-xl font-black num">{{ tile.value }}</div>
+            <div class="text-[11px] font-semibold leading-tight muted">{{ tile.label | t }}</div>
+          </div>
+        }
+      </div>
+      <p class="hint">{{ 'org.usageHint' | t: { n: d.stats.matchesCounted } }}</p>
+    </div>
+
     <!-- Punctuality requests -->
     <h2 class="section-title">{{ 'org.requests' | t }} @if (d.disputes.length) { <span class="chip chip-warn ms-1">{{ d.disputes.length }}</span> }</h2>
     <div class="card">
@@ -43,22 +57,6 @@
       }
     </div>
 
-    <!-- Money -->
-    <h2 class="section-title">{{ 'org.unpaid' | t }}</h2>
-    <div class="card">
-      @for (u of d.unpaid; track u.playerId) {
-        <div class="row-link">
-          <span class="min-w-0 flex-1">
-            <span class="block truncate font-bold">{{ memberName(u.playerId) }}</span>
-            <span class="text-xs muted">{{ u.matches.length }} × {{ 'nav.matches' | t }}</span>
-          </span>
-          <span class="font-black num" style="color: var(--danger)">{{ i18n.money(u.amount, d.settings.currency) }}</span>
-        </div>
-      } @empty {
-        <p class="card-pad text-center text-sm muted">✅ {{ 'org.noUnpaid' | t }}</p>
-      }
-    </div>
-
     <!-- Members -->
     <h2 class="section-title">{{ 'org.members' | t: { n: d.members.length } }}</h2>
     <div class="card">
@@ -74,6 +72,7 @@
               </span>
               <span class="text-xs muted">{{ ('pos.short_' + m.position) | t }} · {{ m.overall }}
                 @if (m.adjustment) { · <b>{{ m.adjustment > 0 ? '+' : '' }}{{ m.adjustment }}</b> }
+                · {{ activeLabel(m.usage.lastActiveAt) }}
               </span>
             </span>
             <app-icon name="chevron" class="muted transition-transform" [class.rotate-90]="open() === m._id" />
@@ -94,6 +93,14 @@
                   <span class="col-span-2 self-center text-xs muted">{{ 'org.noPhone' | t }}</span>
                 }
                 <a class="btn btn-sm btn-ghost" [href]="'mailto:' + m.contact.email"><app-icon name="mail" [size]="16" /></a>
+              </div>
+
+              <!-- App usage -->
+              <div class="mb-4 flex flex-wrap gap-1.5">
+                <span class="chip" [ngClass]="m.usage.push ? 'chip-primary' : ''">🔔 {{ m.usage.push ? ('me.notifOn' | t) : ('me.notifOff' | t) }}</span>
+                <span class="chip" [ngClass]="m.usage.email ? 'chip-primary' : ''">✉️ {{ 'me.emails' | t }}</span>
+                @if (m.usage.google) { <span class="chip">G {{ 'org.google' | t }}</span> }
+                @if (m.usage.outOf) { <span class="chip">{{ 'org.repliedOf' | t: { a: m.usage.replies, b: m.usage.outOf } }}</span> }
               </div>
 
               <!-- Punctuality -->
@@ -149,8 +156,6 @@
       <div class="grid grid-cols-2 gap-3">
         <label class="field"><span>{{ 'org.defaultCapacity' | t }}</span><input class="input num" type="number" name="cap" min="2" max="22" [(ngModel)]="settings.defaultCapacity" /></label>
         <label class="field"><span>{{ 'org.grace' | t }}</span><input class="input num" type="number" name="grace" min="0" max="30" [(ngModel)]="settings.lateGraceMinutes" /></label>
-        <label class="field"><span>{{ 'org.defaultPrice' | t }}</span><input class="input num" type="number" name="price" min="0" [(ngModel)]="settings.defaultPrice" /></label>
-        <label class="field"><span>{{ 'org.currency' | t }}</span><input class="input" name="currency" maxlength="5" [(ngModel)]="settings.currency" /></label>
       </div>
       <label class="field"><span>{{ 'org.ratingWindow' | t }}</span><input class="input num" type="number" name="window" min="12" max="168" [(ngModel)]="settings.ratingWindowHours" /></label>
       <button class="btn btn-primary btn-block" [disabled]="busy()">{{ 'app.save' | t }}</button>

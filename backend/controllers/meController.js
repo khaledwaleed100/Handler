@@ -67,6 +67,7 @@ export const updateMe = async (req, res) => {
         if (!['en', 'ar'].includes(b.lang)) throw httpError(400, 'Invalid language');
         user.preferences.lang = b.lang;
     }
+    if (b.emailNotifications !== undefined) user.preferences.emailNotifications = v.bool(b.emailNotifications, 'Emails');
     if (b.theme !== undefined) {
         if (!['light', 'dark'].includes(b.theme)) throw httpError(400, 'Invalid theme');
         user.preferences.theme = b.theme;
@@ -81,7 +82,8 @@ export const updateMe = async (req, res) => {
 // @route PUT /api/me/password  { currentPassword, newPassword }
 export const changePassword = async (req, res) => {
     const user = await User.findById(req.user._id).select('+passwordHash');
-    if (!(await user.matchPassword(req.body?.currentPassword))) throw httpError(400, 'Current password is wrong');
+    // People who joined with Google can add a password without a current one.
+    if (user.hasPassword && !(await user.matchPassword(req.body?.currentPassword))) throw httpError(400, 'Current password is wrong');
     await user.setPassword(v.password(req.body?.newPassword));
     await user.save();
     res.json({ ok: true });
@@ -212,7 +214,11 @@ export const sendFeedback = async (req, res) => {
 export const deleteMe = async (req, res) => {
     if (req.user.role === 'organizer') throw httpError(400, 'The organizer account cannot be deleted from the app');
     const user = await User.findById(req.user._id).select('+passwordHash');
-    if (!(await user.matchPassword(req.body?.password))) throw httpError(400, 'Password is wrong');
+    // Password accounts confirm with the password; Google-only accounts type their email.
+    const confirmed = user.hasPassword
+        ? await user.matchPassword(req.body?.password)
+        : String(req.body?.password || '').trim().toLowerCase() === user.email;
+    if (!confirmed) throw httpError(400, user.hasPassword ? 'Password is wrong' : 'Type your email exactly to confirm');
 
     const player = req.player;
     if (player) {

@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { Me, SelfPlayer, User } from './models';
+import { GoogleSignInResult, Me, SelfPlayer, User } from './models';
 import { I18n } from './i18n/i18n.service';
 
 interface SessionResponse extends Me {
@@ -58,6 +58,31 @@ export class AuthService {
 
   async register(body: Record<string, unknown>) {
     const res = await firstValueFrom(this.http.post<SessionResponse>(`${this.api}/register`, body, { withCredentials: true }));
+    this.setSession(res);
+  }
+
+  /**
+   * Google sign-in. Returns null when signed in; otherwise the details needed to
+   * finish sign-up (kept here until the profile steps are done).
+   */
+  readonly googleSignup = signal<GoogleSignInResult | null>(null);
+
+  async google(credential: string, inviteCode?: string): Promise<GoogleSignInResult | null> {
+    const res = await firstValueFrom(this.http.post<SessionResponse & GoogleSignInResult>(
+      `${this.api}/google`, { credential, inviteCode }, { withCredentials: true }));
+    if (res.needsProfile) {
+      this.googleSignup.set(res);
+      return res;
+    }
+    this.setSession(res);
+    return null;
+  }
+
+  async googleComplete(body: Record<string, unknown>) {
+    const signup = this.googleSignup();
+    const res = await firstValueFrom(this.http.post<SessionResponse>(
+      `${this.api}/google/complete`, { ...body, signupToken: signup?.signupToken }, { withCredentials: true }));
+    this.googleSignup.set(null);
     this.setSession(res);
   }
 

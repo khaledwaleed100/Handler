@@ -65,7 +65,7 @@ export const setRsvp = async (match, playerId, status) => {
             title: "You're in! ⚽",
             body: `A spot opened up for ${match.place}.`,
             url: `/matches/${match._id}`
-        }).catch(() => {});
+        }, { email: true }).catch(() => {});
     }
     return after;
 };
@@ -126,7 +126,7 @@ export const finalizeRatings = async (match, { recompute = true } = {}) => {
     return match;
 };
 
-/** Finalizes every match whose rating window has passed. Called lazily and by the cron tick. */
+/** Finalizes every match whose rating window has passed. Called lazily whenever someone opens Home or Matches. */
 export const finalizeDueMatches = async () => {
     const due = await Match.find({
         status: 'completed',

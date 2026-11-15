@@ -68,7 +68,8 @@ export interface User {
   role: 'organizer' | 'member';
   phone: string;
   contactConsent: boolean;
-  preferences: { theme: 'light' | 'dark'; lang: 'en' | 'ar' };
+  hasPassword: boolean;
+  preferences: { theme: 'light' | 'dark'; lang: 'en' | 'ar'; emailNotifications?: boolean };
 }
 
 export interface Me {
@@ -78,6 +79,7 @@ export interface Me {
 }
 
 export type RsvpStatus = 'in' | 'out' | 'maybe';
+export type NotifyKind = 'ask' | 'soon' | 'message';
 
 export interface Attendance {
   player: string;
@@ -93,7 +95,6 @@ export interface Match {
   mapUrl: string;
   kickoff: string;
   capacity: number;
-  price: number;
   status: 'upcoming' | 'completed' | 'cancelled';
   rsvp: { confirmed: string[]; waitlist: string[]; maybe: string[]; out: string[] };
   myRsvp: RsvpStatus | null;
@@ -106,9 +107,9 @@ export interface Match {
   mvp: string | null;
   ratings: { closesAt: string; finalized: boolean; myTaskPending: boolean; done: number; total: number } | null;
   myAttendance: Attendance | null;
-  myPayment: { paid: boolean } | null;
   attendance?: Attendance[];
-  payments?: { player: string; paid: boolean; at: string }[];
+  seen?: string[];
+  notifications?: { kind: NotifyKind; at: string; recipients: number }[];
 }
 
 export interface MatchWithPlayers extends Match {
@@ -143,11 +144,9 @@ export interface RatingTask {
 
 export interface Home {
   groupName: string;
-  currency: string;
   next: MatchWithPlayers | null;
   todo: {
     rate: { matchId: string; place: string; kickoff: string; closesAt: string; count: number }[];
-    unpaid: { matchId: string; place: string; kickoff: string; price: number }[];
     disputes?: number;
     needResult?: { matchId: string; place: string; kickoff: string }[];
   };
@@ -176,20 +175,47 @@ export interface GroupSettings {
   inviteCode: string;
   lateGraceMinutes: number;
   defaultCapacity: number;
-  defaultPrice: number;
-  currency: string;
   ratingWindowHours: number;
 }
 
 export interface OrganizerOverview {
   settings: GroupSettings;
-  members: MemberView[];
+  stats: UsageStats;
+  members: (MemberView & { usage: MemberUsage })[];
   disputes: { matchId: string; place: string; kickoff: string; playerId: string; state: string; minutesLate: number; note: string }[];
-  unpaid: { playerId: string; amount: number; matches: { matchId: string; place: string; kickoff: string; price: number }[] }[];
   feedback: { _id: string; name: string; message: string; at: string }[];
 }
 
 export interface PlayerProfile {
   player: PublicPlayer;
   recent: { matchId: string; place: string; kickoff: string; result: Result; score: string; goals: number; assists: number; mvp: boolean }[];
+}
+
+export interface UsageStats {
+  members: number;
+  active7: number;
+  active30: number;
+  pushOn: number;
+  google: number;
+  replyRate: number | null;
+  seenRate: number | null;
+  ratingRate: number | null;
+  pollTurnout: number | null;
+  matchesCounted: number;
+}
+
+export interface MemberUsage {
+  lastActiveAt: string | null;
+  push: boolean;
+  email: boolean;
+  google: boolean;
+  replies: number;
+  outOf: number;
+}
+
+export interface GoogleSignInResult {
+  needsProfile?: boolean;
+  signupToken?: string;
+  name?: string;
+  email?: string;
 }

@@ -27,7 +27,6 @@ const matchSchema = new mongoose.Schema({
     mapUrl: { type: String, trim: true, maxlength: 500, default: '' },
     kickoff: { type: Date, required: true },
     capacity: { type: Number, min: 2, max: 22, default: 10 },
-    price: { type: Number, min: 0, max: 100000, default: 0 }, // per player
     status: { type: String, enum: ['upcoming', 'completed', 'cancelled'], default: 'upcoming' },
 
     rsvps: [rsvpSchema],
@@ -47,7 +46,10 @@ const matchSchema = new mongoose.Schema({
     completedAt: { type: Date, default: null },
 
     attendance: [attendanceSchema],
-    payments: [{ player: { type: ObjectId, ref: 'Player' }, paid: Boolean, at: Date, _id: false }],
+    // Who opened the match page (for the organizer's "seen / not seen" list).
+    seenBy: [{ player: { type: ObjectId, ref: 'Player' }, at: Date, _id: false }],
+    // Organizer-sent notifications, newest last (shown so the organizer doesn't double-send).
+    notifications: [{ kind: String, at: Date, recipients: Number, _id: false }],
 
     // Post-match rating round. Each player rates a few others; who rated whom is never exposed.
     ratingAssignments: [{
@@ -59,12 +61,7 @@ const matchSchema = new mongoose.Schema({
     mvpVotes: [{ voter: { type: ObjectId, ref: 'Player' }, for: { type: ObjectId, ref: 'Player' }, _id: false }],
     mvp: { type: ObjectId, ref: 'Player', default: null },
     ratingsClosesAt: { type: Date, default: null },
-    ratingsFinalized: { type: Boolean, default: false },
-
-    remindersSent: {
-        dayBefore: { type: Boolean, default: false },
-        twoHours: { type: Boolean, default: false }
-    }
+    ratingsFinalized: { type: Boolean, default: false }
 }, { timestamps: true });
 
 matchSchema.index({ status: 1, kickoff: 1 });

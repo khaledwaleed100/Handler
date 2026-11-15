@@ -1,10 +1,10 @@
-# ⚽ 5-a-side
+# ⚽ The Handler
 
 A phone-first app for one friends' football group. Players join with an invite link and look after their own profile. The app collects replies, makes fair teams and keeps everyone's rating honest, so the organizer doesn't have to.
 
 ## How it works
 
-**Joining.** The organizer shares an invite link (Organizer → Invite link). Players sign up, pick a position, rate themselves honestly and agree to share their phone number with the organizer only.
+**Joining.** The organizer shares an invite link (Organizer → Invite link). Players sign up (with Google or a password), pick a position, rate themselves honestly and agree to share their phone number with the organizer only.
 
 **Ratings nobody can game.** Each player's overall comes from three sources:
 
@@ -24,7 +24,9 @@ The visible overall moves at most 3 points per update. The organizer can add a s
 
 **Fair teams.** The team-maker tries every possible split (126 for 10 players) and weighs: equal strength, keepers on different sides, defenders and forwards spread out, wishes, and not the same teammates every week. It offers 3 options. The organizer can swap players on the pitch, then publish and share to WhatsApp as an image.
 
-**Everything else.** In / Out / Maybe replies with an automatic waitlist, reminders, "Add to calendar", weather at kick-off, cost tracking (who has paid), Player of the Week/Month voting, push notifications, English and Arabic (right-to-left), dark and light themes, and installation as a phone app.
+**Reaching people.** The organizer can notify the group from any match ("Are you in?", "Kick-off soon", or a short message), by phone notification and email, and sees who has answered, who opened the match without answering, and who hasn't opened it at all. The Organizer screen also shows app usage (active members, reply rate, rating completion), counts only.
+
+**Everything else.** In / Out / Maybe replies with an automatic waitlist, "Add to calendar", weather at kick-off, Player of the Week/Month voting, English and Arabic (right-to-left), dark and light themes, and installation as a phone app.
 
 ## Privacy rules (enforced on the server, in `backend/services/views.js`)
 
@@ -43,26 +45,15 @@ cd ../backend && npm run demo
 
 `npm run demo` starts the app at http://localhost:3000 on a **temporary in-memory database** with a sample group, so it never touches your real data. Logins: `organizer@demo.test` / `demo1234`, or a player such as `omar@demo.test` / `demo1234`.
 
-Tests (74, including a full match-week run through the API):
+Tests (80, including a full match-week run through the API):
 
 ```bash
 cd backend && npm test
 ```
 
-## Deploying (Render)
+## Deploying
 
-1. Set the environment variables listed in [backend/.env.example](backend/.env.example). New in this version:
-   - `ORGANIZER_EMAIL`: your email. Sign up at `/join/organizer` with it to create the organizer account.
-   - `JWT_SECRET`, `REFRESH_TOKEN_SECRET`: at least 32 random characters each. The server refuses to start without them.
-   - `CRON_SECRET`, plus a free scheduler (for example cron-job.org) calling `POST /api/cron/tick` every 15–30 minutes with the header `x-cron-secret`. This sends reminders and closes rating rounds.
-   - `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY`: for phone notifications (`npx web-push generate-vapid-keys`).
-   - `GMAIL_USER` / `GMAIL_APP_PASSWORD`: for password reset codes.
-2. Old data does not fit the new structure. To wipe it, run this from `backend/` with `MONGO_URI` set:
-   ```bash
-   node scripts/resetData.js
-   ```
-   This only shows counts. Add `--yes` to actually delete. **Deleted data cannot be recovered.**
-3. Deploy, then open `/join/organizer` and sign up with `ORGANIZER_EMAIL`.
+Step by step, including Google sign-in, Cloudinary, Gmail and the environment variables: see [DEPLOY.md](DEPLOY.md).
 
 ## Structure
 

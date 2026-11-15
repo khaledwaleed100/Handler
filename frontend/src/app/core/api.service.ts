@@ -4,7 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
 import {
   AdjustmentReason, AttendanceRecord, Attributes, GroupSettings, Home, Match, MatchList, MatchWithPlayers, Me,
-  MemberView, OrganizerOverview, PlayerProfile, Position, Preferences, PublicPlayer, RatingTask, RsvpStatus, TeamOption
+  MemberView, NotifyKind, OrganizerOverview, PlayerProfile, Position, Preferences, PublicPlayer, RatingTask, RsvpStatus, TeamOption
 } from './models';
 
 /** Every API call in one place. Returns promises, which read nicely with async/await in screens. */
@@ -28,11 +28,12 @@ export class Api {
 
   // Home & settings
   home() { return this.get<Home>('/home'); }
-  settings() { return this.get<{ groupName: string; currency: string; lateGraceMinutes: number }>('/settings'); }
+  settings() { return this.get<{ groupName: string; lateGraceMinutes: number }>('/settings'); }
+  config() { return this.get<{ googleClientId: string | null }>('/config'); }
 
   // Me
   me() { return this.get<Me>('/me'); }
-  updateMe(body: Partial<{ name: string; phone: string; position: Position; selfRating: Attributes; lang: 'en' | 'ar'; theme: 'light' | 'dark' }>) {
+  updateMe(body: Partial<{ name: string; phone: string; position: Position; selfRating: Attributes; lang: 'en' | 'ar'; theme: 'light' | 'dark'; emailNotifications: boolean }>) {
     return this.put<Me>('/me', body);
   }
   changePassword(currentPassword: string, newPassword: string) { return this.put<{ ok: boolean }>('/me/password', { currentPassword, newPassword }); }
@@ -57,7 +58,7 @@ export class Api {
   // Matches
   matches(scope: 'upcoming' | 'past') { return this.get<MatchList>('/matches', { scope }); }
   match(id: string) { return this.get<MatchWithPlayers>(`/matches/${id}`); }
-  createMatch(body: { place: string; mapUrl?: string; kickoff: string; capacity?: number; price?: number }) { return this.post<MatchWithPlayers>('/matches', body); }
+  createMatch(body: { place: string; mapUrl?: string; kickoff: string; capacity?: number }) { return this.post<MatchWithPlayers>('/matches', body); }
   updateMatch(id: string, body: Record<string, unknown>) { return this.put<MatchWithPlayers>(`/matches/${id}`, body); }
   deleteMatch(id: string) { return this.del<{ ok: boolean }>(`/matches/${id}`); }
   rsvp(id: string, status: RsvpStatus) { return this.post<MatchWithPlayers>(`/matches/${id}/rsvp`, { status }); }
@@ -68,7 +69,9 @@ export class Api {
   saveResult(id: string, score: { a: number; b: number }, stats: { player: string; goals: number; assists: number }[]) {
     return this.post<MatchWithPlayers>(`/matches/${id}/result`, { score, stats });
   }
-  setPayment(id: string, playerId: string, paid: boolean) { return this.post<MatchWithPlayers>(`/matches/${id}/payments`, { playerId, paid }); }
+  notify(id: string, kind: NotifyKind, note?: string) {
+    return this.post<{ recipients: number; reached: number; match: MatchWithPlayers }>(`/matches/${id}/notify`, { kind, note });
+  }
   ratingTask(id: string) { return this.get<RatingTask>(`/matches/${id}/rating-task`); }
   submitRatings(id: string, ratings: { ratee: string; scores: Partial<Attributes>; playAgain: boolean }[], mvp: string | null) {
     return this.post<{ ok: boolean }>(`/matches/${id}/ratings`, { ratings, mvp });

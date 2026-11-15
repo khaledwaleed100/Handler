@@ -54,7 +54,6 @@ for (const [i, [name, position, level]] of people.entries()) {
 const day = 24 * 3600 * 1000;
 const settings = await getSettings();
 settings.groupName = 'Tuesday Ballers';
-settings.defaultPrice = 50;
 await settings.save();
 
 // Three played matches with results and finished rating rounds.
@@ -72,12 +71,11 @@ for (let w = 3; w >= 1; w--) {
     for (const id of [...scorer(teamA, a), ...scorer(teamB, b)]) goals.set(String(id), (goals.get(String(id)) || 0) + 1);
 
     const match = await Match.create({
-        createdBy: players[0].doc.user, place: 'El Shams Club', kickoff, capacity: 10, price: 50, status: 'completed',
+        createdBy: players[0].doc.user, place: 'El Shams Club', kickoff, capacity: 10, status: 'completed',
         rsvps: ids.map(id => ({ player: id, status: 'in', at: new Date(kickoff - 3 * day) })),
         teamA: teamA.map(p => p.doc._id), teamB: teamB.map(p => p.doc._id), teamsPublished: true,
         score: { a, b }, stats: [...goals].map(([player, g]) => ({ player, goals: g, assists: Math.random() < 0.5 ? 1 : 0 })),
         attendance: [{ player: ids[1], state: 'late', arrivedAt: new Date(+kickoff + 12 * 60000), minutesLate: 12 }],
-        payments: ids.slice(0, 7).map(id => ({ player: id, paid: true, at: kickoff })),
         completedAt: kickoff, ratingsClosesAt: new Date(+kickoff + 3 * day), ratingsFinalized: true,
         mvp: [...goals].sort((x, y) => y[1] - x[1])[0]?.[0] || ids[0]
     });
@@ -94,7 +92,7 @@ for (let w = 3; w >= 1; w--) {
 const next = new Date(Date.now() + 2 * day);
 next.setHours(20, 0, 0, 0);
 await Match.create({
-    createdBy: players[0].doc.user, place: 'El Shams Club', kickoff: next, capacity: 10, price: 50,
+    createdBy: players[0].doc.user, place: 'El Shams Club', kickoff: next, capacity: 10,
     rsvps: players.slice(0, 8).map((p, i) => ({ player: p.doc._id, status: 'in', at: new Date(Date.now() - (10 - i) * 3600e3) }))
         .concat([{ player: players[10].doc._id, status: 'maybe', at: new Date() }])
 });

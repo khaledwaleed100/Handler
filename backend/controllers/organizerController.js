@@ -4,12 +4,14 @@ import Match from '../models/Match.js';
 import Feedback from '../models/Feedback.js';
 import PeerRating from '../models/PeerRating.js';
 import Preference from '../models/Preference.js';
+import Poll from '../models/Poll.js';
 import { getSettings, newInviteCode } from '../models/Settings.js';
 import { httpError } from '../utils/httpError.js';
 import * as v from '../utils/validate.js';
 import { matchView, organizerPlayer } from '../services/views.js';
 import { recomputeStandings } from '../services/standingsService.js';
 import { finalizeDueMatches } from '../services/matchService.js';
+import { markSeen } from './matchController.js';
 import { notifyPlayers } from '../services/pushService.js';
 
 const settingsView = (s) => ({
@@ -17,27 +19,64 @@ const settingsView = (s) => ({
     inviteCode: s.inviteCode,
     lateGraceMinutes: s.lateGraceMinutes,
     defaultCapacity: s.defaultCapacity,
-    defaultPrice: s.defaultPrice,
-    currency: s.currency,
     ratingWindowHours: s.ratingWindowHours
 });
 
 // @route GET /api/settings  — group basics every member needs (no invite code)
 export const publicSettings = async (req, res) => {
     const s = await getSettings();
-    res.json({ groupName: s.groupName, currency: s.currency, lateGraceMinutes: s.lateGraceMinutes });
+    res.json({ groupName: s.groupName, lateGraceMinutes: s.lateGraceMinutes });
+};
+
+const DAY = 24 * 3600 * 1000;
+const pct = (part, whole) => (whole ? Math.round((part / whole) * 100) : null);
+
+/**
+ * How the group uses the app. Counts only, nothing about what anyone answered.
+ */
+const usageStats = async (players, users) => {
+    const now = Date.now();
+    const ids = players.map(p => String(p._id));
+    const userList = [...users.values()];
+    const [recent, rated, polls] = await Promise.all([
+        Match.find({ status: { $ne: 'cancelled' } }).sort({ kickoff: -1 }).limit(5).select('rsvps seenBy').lean(),
+        Match.find({ status: 'completed', 'ratingAssignments.0': { $exists: true } }).sort({ kickoff: -1 }).limit(5).select('ratingAssignments').lean(),
+        Poll.find().sort({ createdAt: -1 }).limit(3).select('votes').lean()
+    ]);
+
+    const members = ids.length;
+    const avg = (list) => (list.length ? Math.round(list.reduce((s, x) => s + x, 0) / list.length) : null);
+    const repliesByPlayer = new Map(ids.map(id => [id, 0]));
+    for (const m of recent) for (const r of m.rsvps) if (repliesByPlayer.has(String(r.player))) repliesByPlayer.set(String(r.player), repliesByPlayer.get(String(r.player)) + 1);
+
+    return {
+        stats: {
+            members,
+            active7: userList.filter(u => u.lastActiveAt && now - u.lastActiveAt < 7 * DAY).length,
+            active30: userList.filter(u => u.lastActiveAt && now - u.lastActiveAt < 30 * DAY).length,
+            pushOn: userList.filter(u => u.pushSubscriptions?.length).length,
+            google: userList.filter(u => u.googleId).length,
+            replyRate: avg(recent.map(m => pct(m.rsvps.length, members))),
+            seenRate: avg(recent.map(m => pct((m.seenBy || []).length, members))),
+            ratingRate: avg(rated.map(m => pct(m.ratingAssignments.filter(a => a.done).length, m.ratingAssignments.length))),
+            pollTurnout: avg(polls.map(p => pct(p.votes.length, members))),
+            matchesCounted: recent.length
+        },
+        repliesByPlayer,
+        recentCount: recent.length
+    };
 };
 
 // @route GET /api/organizer/overview
 export const overview = async (req, res) => {
-    const [settings, players, feedback, disputeMatches, pricedMatches] = await Promise.all([
+    const [settings, players, feedback, disputeMatches] = await Promise.all([
         getSettings(),
         Player.find().sort({ name: 1 }),
         Feedback.find().sort({ createdAt: -1 }).limit(30).populate('userId', 'name').lean(),
-        Match.find({ 'attendance.dispute.state': 'pending' }).select('place kickoff attendance').lean(),
-        Match.find({ status: 'completed', price: { $gt: 0 } }).select('place kickoff price teamA teamB payments').lean()
+        Match.find({ 'attendance.dispute.state': 'pending' }).select('place kickoff attendance').lean()
     ]);
-    const users = new Map((await User.find({ _id: { $in: players.map(p => p.user) } })).map(u => [String(u._id), u]));
+    const users = new Map((await User.find({ _id: { $in: players.map(p => p.user) } }).select('+pushSubscriptions +googleId'))
+        .map(u => [String(u._id), u]));
 
     const disputes = disputeMatches.flatMap(m => m.attendance
         .filter(a => a.dispute?.state === 'pending')
@@ -51,24 +90,26 @@ export const overview = async (req, res) => {
             note: a.dispute.note
         })));
 
-    // Who still owes money, per player.
-    const owed = new Map();
-    for (const m of pricedMatches) {
-        const paid = new Set(m.payments.filter(p => p.paid).map(p => String(p.player)));
-        for (const id of [...m.teamA, ...m.teamB].map(String)) {
-            if (paid.has(id)) continue;
-            const e = owed.get(id) || { playerId: id, amount: 0, matches: [] };
-            e.amount += m.price;
-            e.matches.push({ matchId: String(m._id), place: m.place, kickoff: m.kickoff, price: m.price });
-            owed.set(id, e);
-        }
-    }
+    const { stats, repliesByPlayer, recentCount } = await usageStats(players, users);
 
     res.json({
         settings: settingsView(settings),
-        members: players.map(p => organizerPlayer(p, users.get(String(p.user)))),
+        stats,
+        members: players.map(p => {
+            const u = users.get(String(p.user));
+            return {
+                ...organizerPlayer(p, u),
+                usage: {
+                    lastActiveAt: u?.lastActiveAt || null,
+                    push: !!u?.pushSubscriptions?.length,
+                    email: u?.preferences?.emailNotifications !== false,
+                    google: !!u?.googleId,
+                    replies: repliesByPlayer.get(String(p._id)) || 0,
+                    outOf: recentCount
+                }
+            };
+        }),
         disputes,
-        unpaid: [...owed.values()].sort((a, b) => b.amount - a.amount),
         feedback: feedback.map(f => ({ _id: String(f._id), name: f.userId?.name || 'Former player', message: f.message, at: f.createdAt }))
     });
 };
@@ -82,12 +123,9 @@ export const updateSettings = async (req, res) => {
     const fields = {
         lateGraceMinutes: v.int(b.lateGraceMinutes, { min: 0, max: 30, field: 'Grace period' }),
         defaultCapacity: v.int(b.defaultCapacity, { min: 2, max: 22, field: 'Players per match' }),
-        defaultPrice: v.int(b.defaultPrice, { min: 0, max: 100000, field: 'Price' }),
         ratingWindowHours: v.int(b.ratingWindowHours, { min: 12, max: 168, field: 'Rating window' })
     };
     for (const [k, val] of Object.entries(fields)) if (val !== undefined) s[k] = val;
-    const currency = v.str(b.currency, { min: 1, max: 5, field: 'Currency' });
-    if (currency) s.currency = currency;
     await s.save();
     res.json(settingsView(s));
 };
@@ -173,18 +211,13 @@ export const home = async (req, res) => {
     const viewer = { player: req.player, isOrganizer: req.user.role === 'organizer' };
 
     const next = await Match.findOne({ status: 'upcoming', kickoff: { $gte: new Date(Date.now() - 3 * 3600 * 1000) } }).sort({ kickoff: 1 });
+    if (next) await markSeen(next, req.player); // Home shows the next match, so it counts as seen.
 
     const toRate = me ? await Match.find({
         status: 'completed',
         ratingsFinalized: false,
         ratingAssignments: { $elemMatch: { rater: me, done: false } }
     }).select('place kickoff ratingsClosesAt ratingAssignments').lean() : [];
-
-    const unpaid = me ? await Match.find({
-        status: 'completed', price: { $gt: 0 },
-        $or: [{ teamA: me }, { teamB: me }],
-        payments: { $not: { $elemMatch: { player: me, paid: true } } }
-    }).select('place kickoff price').lean() : [];
 
     const todo = {
         rate: toRate.map(m => ({
@@ -193,8 +226,7 @@ export const home = async (req, res) => {
             kickoff: m.kickoff,
             closesAt: m.ratingsClosesAt,
             count: m.ratingAssignments.find(a => String(a.rater) === me)?.ratees.length || 0
-        })),
-        unpaid: unpaid.map(m => ({ matchId: String(m._id), place: m.place, kickoff: m.kickoff, price: m.price }))
+        }))
     };
 
     if (viewer.isOrganizer) {
@@ -209,7 +241,6 @@ export const home = async (req, res) => {
     const settings = await getSettings();
     res.json({
         groupName: settings.groupName,
-        currency: settings.currency,
         next: next ? await matchView(next, viewer) : null,
         todo
     });

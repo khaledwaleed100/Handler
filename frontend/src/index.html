@@ -2,20 +2,20 @@
 <html lang="en" class="dark">
 <head>
   <meta charset="utf-8">
-  <title>5-a-side</title>
+  <title>The Handler</title>
   <base href="/">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="description" content="Your group's 5-a-side matches, fair teams and ratings.">
-  <meta name="theme-color" content="#07110c">
+  <meta name="description" content="The Handler: your 5-a-side group's matches, fair teams and honest ratings.">
+  <meta name="theme-color" content="#0e2219">
   <meta name="color-scheme" content="dark light">
 
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="5-a-side">
+  <meta name="apple-mobile-web-app-title" content="The Handler">
   <link rel="apple-touch-icon" href="assets/icons/icon-192x192.png">
-  <link rel="icon" type="image/png" href="assets/icons/icon-96x96.png">
+  <link rel="icon" type="image/png" href="favicon.png">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -26,8 +26,8 @@
   <style>
     /* Splash shown until the app starts. On a sleeping free server this can take a while. */
     #splash { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
-              background: #07110c; color: #8aa497; font: 600 14px system-ui, sans-serif; text-align: center; padding: 24px; }
-    html:not(.dark) #splash { background: #f3f6f4; color: #55655c; }
+              background: #0e2219; color: #a9c9b8; font: 600 14px system-ui, sans-serif; text-align: center; padding: 24px; }
+    html:not(.dark) #splash { background: #f4fbf6; color: #4d6b5a; }
     #splash .ball { font-size: 44px; animation: bounce 1s ease-in-out infinite; }
     #splash .slow { opacity: 0; animation: show .3s 4s forwards; }
     @keyframes bounce { 50% { transform: translateY(-14px); } }
@@ -38,7 +38,7 @@
 <body>
   <app-root></app-root>
   <div id="splash" aria-hidden="true">
-    <div class="ball">⚽</div>
+    <img class="ball" src="assets/icons/icon-96x96.png" width="64" height="64" alt="" style="border-radius:16px">
     <div class="slow" id="splash-text">Waking the server up… this can take up to a minute.</div>
   </div>
   <noscript>Please enable JavaScript to use this app.</noscript>

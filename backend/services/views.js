@@ -99,7 +99,6 @@ const matchSummary = (m, viewer) => {
     const showTeams = m.teamsPublished || viewer.isOrganizer;
     const myRsvp = m.rsvps.find(r => String(r.player) === me);
     const task = m.ratingAssignments?.find(a => String(a.rater) === me);
-    const myPayment = m.payments?.find(p => String(p.player) === me);
 
     return {
         _id: String(m._id),
@@ -107,7 +106,6 @@ const matchSummary = (m, viewer) => {
         mapUrl: m.mapUrl,
         kickoff: m.kickoff,
         capacity: m.capacity,
-        price: m.price,
         status: m.status,
         rsvp: lists,
         myRsvp: myRsvp ? myRsvp.status : null,
@@ -126,10 +124,10 @@ const matchSummary = (m, viewer) => {
             total: (m.ratingAssignments || []).length
         } : null,
         myAttendance: (m.attendance || []).find(a => String(a.player) === me) || null,
-        myPayment: m.price > 0 && lists.confirmed.includes(me) || myPayment ? { paid: !!myPayment?.paid } : null,
         // Organizer-only details.
         attendance: viewer.isOrganizer ? m.attendance : undefined,
-        payments: viewer.isOrganizer ? m.payments : undefined
+        seen: viewer.isOrganizer ? (m.seenBy || []).map(x => String(x.player)) : undefined,
+        notifications: viewer.isOrganizer ? (m.notifications || []).slice(-5) : undefined
     };
 };
 
@@ -151,6 +149,7 @@ export const meView = async (user, player) => ({
         role: user.role,
         phone: user.phone,
         contactConsent: !!user.contactConsentAt,
+        hasPassword: !!user.hasPassword,
         preferences: user.preferences
     },
     player: player ? selfPlayer(player) : null

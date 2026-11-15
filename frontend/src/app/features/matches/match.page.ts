@@ -5,14 +5,14 @@ import { Router, RouterLink } from '@angular/router';
 import { Api } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { I18n, TPipe } from '../../core/i18n/i18n.service';
-import { Attendance, MatchWithPlayers, PublicPlayer, RsvpStatus, TeamOption } from '../../core/models';
+import { Attendance, MatchWithPlayers, NotifyKind, PublicPlayer, RsvpStatus, TeamOption } from '../../core/models';
 import { Ui } from '../../core/ui.service';
 import { RsvpCardComponent } from '../../shared/ui/rsvp-card.component';
 import { PitchComponent } from '../../shared/ui/pitch.component';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { AvatarComponent } from '../../shared/ui/avatar.component';
 
-type Tab = 'players' | 'teams' | 'checkin' | 'result' | 'money';
+type Tab = 'players' | 'teams' | 'checkin' | 'result';
 
 @Component({
   selector: 'app-match',
@@ -37,7 +37,8 @@ export class MatchPage implements OnInit {
   loading = signal(true);
   busy = signal(false);
   tab = signal<Tab>('players');
-  currency = signal('EGP');
+  notifyNote = '';
+  notifyOpen = signal<NotifyKind | null>(null);
 
   // Teams editor
   options = signal<TeamOption[]>([]);
@@ -77,8 +78,7 @@ export class MatchPage implements OnInit {
     return [...new Set([...m.teamA, ...m.teamB, ...m.rsvp.confirmed])];
   });
   attendanceOf = (id: string): Attendance | undefined => this.match()?.attendance?.find(a => a.player === id);
-  paidOf = (id: string) => !!this.match()?.payments?.find(p => p.player === id)?.paid;
-  paidCount = computed(() => this.played().filter(id => this.paidOf(id)).length);
+  seenOf = (id: string) => !!this.match()?.seen?.includes(id);
   goalSum = computed(() => {
     const g = this.goals();
     const m = this.match();
@@ -95,14 +95,12 @@ export class MatchPage implements OnInit {
   tabs = computed<Tab[]>(() => {
     const m = this.match();
     if (!m) return [];
-    if (m.status === 'completed') return ['result', 'checkin', 'money'];
-    if (m.price > 0) return ['players', 'teams', 'checkin', 'result', 'money'];
+    if (m.status === 'completed') return ['result', 'checkin'];
     return ['players', 'teams', 'checkin', 'result'];
   });
 
   async ngOnInit() {
     await this.load();
-    this.api.settings().then(s => this.currency.set(s.currency)).catch(() => {});
   }
 
   async load() {
@@ -259,10 +257,31 @@ export class MatchPage implements OnInit {
     this.run(() => this.api.closeRatings(this.id()), this.i18n.t('match.ratingsClosed'));
   }
 
-  // ── Money tab ────────────────────────────────────────
-  togglePaid(id: string) {
-    this.ui.haptic();
-    this.run(() => this.api.setPayment(this.id(), id, !this.paidOf(id)));
+  // ── Notify the group ─────────────────────────────────
+  readonly notifyKinds: { kind: NotifyKind; icon: string; label: string; hint: string }[] = [
+    { kind: 'ask', icon: '🙋', label: 'match.notifyAsk', hint: 'match.notifyAskHint' },
+    { kind: 'soon', icon: '⏱', label: 'match.notifySoon', hint: 'match.notifySoonHint' },
+    { kind: 'message', icon: '📣', label: 'match.notifyMessage', hint: 'match.notifyMessageHint' }
+  ];
+
+  lastSent(kind: NotifyKind) {
+    const n = [...(this.match()?.notifications ?? [])].reverse().find(x => x.kind === kind);
+    return n ? this.i18n.t('match.notifyLast', { t: this.i18n.duration(Date.now() - new Date(n.at).getTime()) }) : '';
+  }
+
+  async sendNotify(kind: NotifyKind) {
+    this.busy.set(true);
+    try {
+      const res = await this.api.notify(this.id(), kind, this.notifyNote.trim() || undefined);
+      this.setMatch(res.match);
+      this.notifyOpen.set(null);
+      this.notifyNote = '';
+      this.ui.toast(this.i18n.t('match.notifySent', { n: res.recipients }));
+    } catch (err) {
+      this.ui.error(err);
+    } finally {
+      this.busy.set(false);
+    }
   }
 
   // ── Match actions ────────────────────────────────────

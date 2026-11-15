@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import { OAuth2Client } from 'google-auth-library';
 import { createHash, randomInt, timingSafeEqual } from 'crypto';
 import User from '../models/User.js';
 import Player from '../models/Player.js';
@@ -68,7 +69,14 @@ export const register = async (req, res) => {
     const email = v.email(b.email);
     const organizer = isOrganizerEmail(email);
 
-    if (!organizer) {
+    if (organizer) {
+        // Anyone could type the organizer's email, so a password sign-up for it also
+        // needs the secret ORGANIZER_SETUP_CODE. (Google sign-in proves the email instead.)
+        const code = process.env.ORGANIZER_SETUP_CODE || '';
+        if (code.length < 8 || !safeEqual(String(b.setupCode || ''), code)) {
+            throw httpError(403, 'Use "Continue with Google", or enter the organizer setup code');
+        }
+    } else {
         const settings = await getSettings();
         if (!safeEqual(String(b.inviteCode || ''), settings.inviteCode)) {
             throw httpError(403, 'You need an invite link from the organizer to join');
@@ -110,9 +118,20 @@ export const register = async (req, res) => {
 // @route POST /api/auth/login
 export const login = async (req, res) => {
     const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
-    const user = email ? await User.findOne({ email }).select('+passwordHash +refreshTokenHashes') : null;
+    const user = email ? await User.findOne({ email }).select('+passwordHash +refreshTokenHashes +failedLogins +lockedUntil') : null;
+    if (user?.lockedUntil && user.lockedUntil > new Date()) {
+        throw httpError(429, 'Too many wrong passwords. Try again in 15 minutes, or reset your password.');
+    }
     // Same message whether the email exists or not.
-    if (!user || !(await user.matchPassword(req.body?.password))) throw httpError(401, 'Wrong email or password');
+    if (!user || !(await user.matchPassword(req.body?.password))) {
+        if (user) {
+            user.failedLogins = (user.failedLogins || 0) + 1;
+            if (user.failedLogins >= 10) { user.lockedUntil = new Date(Date.now() + 15 * 60 * 1000); user.failedLogins = 0; }
+            await user.save();
+        }
+        throw httpError(401, 'Wrong email or password');
+    }
+    if (user.failedLogins || user.lockedUntil) { user.failedLogins = 0; user.lockedUntil = null; }
 
     const accessToken = await startSession(res, user);
     res.json({ accessToken, ...(await meView(user, await Player.findOne({ user: user._id }))) });
@@ -197,7 +216,118 @@ export const resetPassword = async (req, res) => {
     user.resetCodeHash = undefined;
     user.resetCodeExpires = undefined;
     user.resetAttempts = 0;
+    user.emailVerified = true; // they received the code, so the email is theirs
     user.refreshTokenHashes = []; // sign out everywhere
     await user.save();
     res.json({ ok: true });
+};
+
+// ── Google sign-in ─────────────────────────────────────────────────────────
+// The browser shows Google's own button and receives a signed "ID token" from Google.
+// We check that token with Google's public keys. No password ever reaches us.
+
+let googleClient = null;
+const google = () => {
+    if (!process.env.GOOGLE_CLIENT_ID) throw httpError(503, 'Google sign-in is not set up yet');
+    googleClient ||= new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+    return googleClient;
+};
+
+const verifyGoogle = async (credential) => {
+    if (typeof credential !== 'string' || credential.length > 4096) throw httpError(400, 'Invalid Google sign-in');
+    let p;
+    try {
+        const ticket = await google().verifyIdToken({ idToken: credential, audience: process.env.GOOGLE_CLIENT_ID });
+        p = ticket.getPayload();
+    } catch (err) {
+        if (err.status) throw err;
+        throw httpError(401, 'Google sign-in failed. Try again.');
+    }
+    if (!p?.email || !p.email_verified) throw httpError(401, 'Your Google email is not verified');
+    return { sub: p.sub, email: p.email.toLowerCase(), name: (p.name || p.email.split('@')[0]).slice(0, 40), picture: p.picture || null };
+};
+
+const SIGNUP_AUDIENCE = 'google-signup';
+
+// @route GET /api/config  — public settings the browser needs
+export const publicConfig = (req, res) => {
+    res.json({ googleClientId: process.env.GOOGLE_CLIENT_ID || null });
+};
+
+// @route POST /api/auth/google  { credential, inviteCode? }
+// Existing account (same Google account or same verified email): signs in.
+// New person: needs the invite link (or ORGANIZER_EMAIL). Gets a short-lived
+// signup token so the app can ask for phone, position and self-rating.
+export const googleSignIn = async (req, res) => {
+    const g = await verifyGoogle(req.body?.credential);
+
+    let user = await User.findOne({ googleId: g.sub }).select('+googleId +refreshTokenHashes');
+    if (!user) {
+        user = await User.findOne({ email: g.email }).select('+googleId +refreshTokenHashes');
+        if (user && !user.googleId) {
+            // Google has proved this person owns the email. If the existing account was
+            // made with a password nobody verified, it might have been created by someone
+            // else using their email: wipe that password and sign out its other sessions.
+            if (!user.emailVerified && user.hasPassword) {
+                user.passwordHash = undefined;
+                user.hasPassword = false;
+                user.refreshTokenHashes = [];
+            }
+            user.googleId = g.sub;
+        }
+    }
+    if (user) user.emailVerified = true;
+    if (user) {
+        const accessToken = await startSession(res, user);
+        return res.json({ accessToken, ...(await meView(user, await Player.findOne({ user: user._id }))) });
+    }
+
+    const organizer = isOrganizerEmail(g.email);
+    if (!organizer) {
+        const settings = await getSettings();
+        if (!safeEqual(String(req.body?.inviteCode || ''), settings.inviteCode)) {
+            throw httpError(403, 'No account yet. Ask the organizer for the invite link and sign up from it.');
+        }
+    }
+    const signupToken = jwt.sign({ ...g, organizer }, process.env.JWT_SECRET, { expiresIn: '20m', audience: SIGNUP_AUDIENCE, algorithm: 'HS256' });
+    res.json({ needsProfile: true, signupToken, name: g.name, email: g.email });
+};
+
+// @route POST /api/auth/google/complete  { signupToken, phone, position, selfRating, consent, lang, name? }
+export const googleComplete = async (req, res) => {
+    let g;
+    try {
+        g = jwt.verify(String(req.body?.signupToken || ''), process.env.JWT_SECRET, { audience: SIGNUP_AUDIENCE, algorithms: ['HS256'] });
+    } catch {
+        throw httpError(400, 'Sign-up took too long. Please continue with Google again.');
+    }
+    const b = req.body || {};
+    if (b.consent !== true) throw httpError(400, 'Please agree to share your contact details with the organizer');
+    const name = v.str(b.name, { min: 2, max: 40, field: 'Name' }) || g.name;
+    const phone = v.phone(b.phone, true);
+    const position = v.position(b.position, true);
+    const selfRating = v.selfRating(b.selfRating ?? {});
+
+    if (await User.exists({ email: g.email })) throw httpError(409, 'This account already exists. Sign in instead.');
+
+    const user = await User.create({
+        email: g.email,
+        googleId: g.sub,
+        emailVerified: true,
+        name,
+        phone,
+        role: g.organizer && isOrganizerEmail(g.email) ? 'organizer' : 'member',
+        contactConsentAt: new Date(),
+        preferences: { lang: b.lang === 'ar' ? 'ar' : 'en' }
+    });
+    try {
+        await Player.create({ user: user._id, name, position, selfRating, attrs: selfRating, avatarUrl: g.picture });
+    } catch (err) {
+        await user.deleteOne();
+        throw err;
+    }
+    await recomputeStandings({ capChanges: false });
+
+    const accessToken = await startSession(res, user);
+    res.status(201).json({ accessToken, ...(await meView(user, await Player.findOne({ user: user._id }))) });
 };

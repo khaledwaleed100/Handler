@@ -19,7 +19,15 @@ const pushSubscriptionSchema = new mongoose.Schema({
 const userSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true, lowercase: true, trim: true, maxlength: 254 },
     name: { type: String, required: true, trim: true, maxlength: 40 },
-    passwordHash: { type: String, required: true, select: false },
+    // Empty for people who only sign in with Google.
+    passwordHash: { type: String, select: false },
+    googleId: { type: String, unique: true, sparse: true, select: false },
+    hasPassword: { type: Boolean, default: false },
+    // True once we know this person owns the email (Google sign-in or an emailed reset code).
+    emailVerified: { type: Boolean, default: false },
+    // Account lock after repeated wrong passwords (on top of per-network rate limits).
+    failedLogins: { type: Number, default: 0, select: false },
+    lockedUntil: { type: Date, default: null, select: false },
     role: { type: String, enum: ['organizer', 'member'], default: 'member' },
 
     // Contact details: visible to the organizer only, never to other members.
@@ -28,8 +36,12 @@ const userSchema = new mongoose.Schema({
 
     preferences: {
         theme: { type: String, enum: ['light', 'dark'], default: 'dark' },
-        lang: { type: String, enum: ['en', 'ar'], default: 'en' }
+        lang: { type: String, enum: ['en', 'ar'], default: 'en' },
+        emailNotifications: { type: Boolean, default: true }
     },
+
+    // Last time this person used the app (for the organizer's usage stats).
+    lastActiveAt: { type: Date, default: null },
 
     // Hashes of active refresh tokens, one per signed-in device (max 5).
     refreshTokenHashes: { type: [String], default: [], select: false },
@@ -44,6 +56,7 @@ const BCRYPT_ROUNDS = 12;
 
 userSchema.methods.setPassword = async function (plain) {
     this.passwordHash = await bcrypt.hash(plain, BCRYPT_ROUNDS);
+    this.hasPassword = true;
 };
 
 userSchema.methods.matchPassword = async function (plain) {

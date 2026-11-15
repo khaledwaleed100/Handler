@@ -54,11 +54,13 @@ app.use(helmet({
         useDefaults: true,
         directives: {
             'default-src': ["'self'"],
-            'script-src': ["'self'"],
-            'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+            // Google's sign-in button is the only outside script allowed.
+            'script-src': ["'self'", 'https://accounts.google.com/gsi/client'],
+            'frame-src': ['https://accounts.google.com/gsi/'],
+            'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://accounts.google.com/gsi/style'],
             'font-src': ["'self'", 'https://fonts.gstatic.com', 'data:'],
-            'img-src': ["'self'", 'data:', 'blob:', 'https://res.cloudinary.com'],
-            'connect-src': ["'self'", 'https://api.open-meteo.com', 'https://fonts.googleapis.com', 'https://fonts.gstatic.com', 'https://res.cloudinary.com'],
+            'img-src': ["'self'", 'data:', 'blob:', 'https://res.cloudinary.com', 'https://lh3.googleusercontent.com'],
+            'connect-src': ["'self'", 'https://api.open-meteo.com', 'https://fonts.googleapis.com', 'https://fonts.gstatic.com', 'https://res.cloudinary.com', 'https://accounts.google.com/gsi/'],
             'worker-src': ["'self'"],
             'manifest-src': ["'self'"],
             'frame-ancestors': ["'none'"],
@@ -68,6 +70,8 @@ app.use(helmet({
         }
     },
     crossOriginEmbedderPolicy: false,
+    // Google's sign-in popup needs to talk back to this window.
+    crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
     crossOriginResourcePolicy: { policy: 'same-site' }
 }));
 app.use(compression());

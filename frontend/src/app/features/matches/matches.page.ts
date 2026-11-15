@@ -88,8 +88,6 @@ import { IconComponent } from '../../shared/ui/icon.component';
               <input class="input" type="time" name="time" [(ngModel)]="form.time" required /></label>
             <label class="field"><span>{{ 'match.capacity' | t }}</span>
               <input class="input num" type="number" name="capacity" [(ngModel)]="form.capacity" min="2" max="22" inputmode="numeric" /></label>
-            <label class="field"><span>{{ 'match.price' | t }}</span>
-              <input class="input num" type="number" name="price" [(ngModel)]="form.price" min="0" inputmode="numeric" /></label>
           </div>
           <label class="field"><span>{{ 'match.mapLink' | t }} <span class="muted">({{ 'app.optional' | t }})</span></span>
             <input class="input" type="url" name="mapUrl" [(ngModel)]="form.mapUrl" placeholder="https://maps.google.com/…" dir="ltr" /></label>
@@ -118,7 +116,7 @@ export class MatchesPage implements OnInit {
   busy = signal(false);
   recentPlaces = signal<string[]>([]);
   readonly today = todayInput();
-  form = { place: '', date: todayInput(), time: '20:00', capacity: 10, price: 0, mapUrl: '' };
+  form = { place: '', date: todayInput(), time: '20:00', capacity: 10, mapUrl: '' };
 
   ngOnInit() {
     this.load();
@@ -152,7 +150,7 @@ export class MatchesPage implements OnInit {
       this.recentPlaces.set(places);
       const last = past.matches[0];
       if (last && !this.form.place) {
-        this.form = { ...this.form, place: last.place, mapUrl: last.mapUrl, capacity: last.capacity, price: last.price };
+        this.form = { ...this.form, place: last.place, mapUrl: last.mapUrl, capacity: last.capacity };
       }
     } catch { /* suggestions are optional */ }
   }
@@ -164,8 +162,7 @@ export class MatchesPage implements OnInit {
         place: this.form.place.trim(),
         mapUrl: this.form.mapUrl.trim() || undefined,
         kickoff: toIso(this.form.date, this.form.time),
-        capacity: Number(this.form.capacity),
-        price: Number(this.form.price) || 0
+        capacity: Number(this.form.capacity)
       });
       this.creating.set(false);
       this.ui.toast(this.i18n.t('match.created'));

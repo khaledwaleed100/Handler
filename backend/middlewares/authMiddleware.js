@@ -17,6 +17,10 @@ export const protect = async (req, res, next) => {
         if (!user) return next(httpError(401, 'Not authorized'));
         req.user = user;
         req.player = await Player.findOne({ user: user._id });
+        // Usage stats: record activity at most every 10 minutes per person.
+        if (!user.lastActiveAt || Date.now() - user.lastActiveAt > 10 * 60 * 1000) {
+            User.updateOne({ _id: user._id }, { $set: { lastActiveAt: new Date() } }).catch(() => {});
+        }
         next();
     } catch {
         next(httpError(401, 'Not authorized'));

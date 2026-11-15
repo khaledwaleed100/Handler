@@ -18,7 +18,7 @@ import { IconComponent } from './icon.component';
   template: `
     @let m = match();
     <div class="card overflow-hidden">
-      <div class="p-4 text-white" style="background: linear-gradient(135deg, #15803d, #065f46)">
+      <div class="p-4 text-white" style="background: linear-gradient(135deg, #22c55e, #0d9488)">
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
             <div class="text-sm font-bold opacity-90">{{ i18n.date(m.kickoff, { weekday: 'long', day: 'numeric', month: 'short' }) }}</div>
@@ -71,7 +71,6 @@ import { IconComponent } from './icon.component';
             <a class="btn btn-sm btn-ghost" [routerLink]="['/matches', m._id]">{{ 'match.tabPlayers' | t }} <app-icon name="chevron" [size]="16" /></a>
           }
           <button class="btn btn-sm btn-ghost" (click)="calendar()"><app-icon name="calendar" [size]="16" /> {{ 'match.addToCalendar' | t }}</button>
-          @if (m.price > 0) { <span class="chip ms-auto self-center">{{ 'match.yourPayment' | t: { amount: i18n.money(m.price, currency()) } }}</span> }
         </div>
       </div>
     </div>`
@@ -84,7 +83,6 @@ export class RsvpCardComponent implements OnInit {
   private weatherService = inject(WeatherService);
 
   match = input.required<MatchWithPlayers>();
-  currency = input('EGP');
   showLink = input(true);
   changed = output<MatchWithPlayers>();
 
@@ -126,6 +124,6 @@ export class RsvpCardComponent implements OnInit {
   }
 
   calendar() {
-    downloadCalendarEvent(this.match(), `⚽ 5-a-side · ${this.match().place}`);
+    downloadCalendarEvent(this.match(), `⚽ The Handler · ${this.match().place}`);
   }
 }

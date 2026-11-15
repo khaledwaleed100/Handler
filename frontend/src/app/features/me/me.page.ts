@@ -167,6 +167,15 @@ export class MePage implements OnInit {
     this.api.updateMe({ theme: t }).then(me => this.auth.applyMe(me)).catch(() => {});
   }
 
+  async toggleEmails() {
+    const on = this.auth.user()?.preferences?.emailNotifications !== false;
+    try {
+      this.auth.applyMe(await this.api.updateMe({ emailNotifications: !on }));
+    } catch (err) {
+      this.ui.error(err);
+    }
+  }
+
   async toggleNotifications() {
     try {
       if (this.push.state() === 'on') await this.push.disable(); else await this.push.enable();
@@ -182,12 +191,17 @@ export class MePage implements OnInit {
 
   // ── Account ─────────────────────────────────────────
   async changePassword() {
-    const current = await this.ui.confirm({ title: this.i18n.t('me.changePassword'), confirm: this.i18n.t('app.next'), input: { label: this.i18n.t('me.currentPassword'), type: 'password' } });
+    // People who joined with Google have no current password to type.
+    const hasPassword = !!this.auth.user()?.hasPassword;
+    const current = hasPassword
+      ? await this.ui.confirm({ title: this.i18n.t('me.changePassword'), confirm: this.i18n.t('app.next'), input: { label: this.i18n.t('me.currentPassword'), type: 'password' } })
+      : 'none';
     if (!current) return;
     const next = await this.ui.confirm({ title: this.i18n.t('me.changePassword'), body: this.i18n.t('auth.passwordHint'), confirm: this.i18n.t('app.save'), input: { label: this.i18n.t('auth.newPassword'), type: 'password' } });
     if (!next) return;
     try {
       await this.api.changePassword(current as string, next as string);
+      await this.auth.reloadMe();
       this.ui.toast(this.i18n.t('app.saved'));
     } catch (err) {
       this.ui.error(err);
@@ -206,9 +220,12 @@ export class MePage implements OnInit {
   }
 
   async deleteAccount() {
+    const hasPassword = !!this.auth.user()?.hasPassword;
     const password = await this.ui.confirm({
       title: this.i18n.t('me.deleteAccount'), body: this.i18n.t('me.deleteHint'), confirm: this.i18n.t('app.delete'), danger: true,
-      input: { label: this.i18n.t('me.deleteConfirm'), type: 'password' }
+      input: hasPassword
+        ? { label: this.i18n.t('me.deleteConfirm'), type: 'password' }
+        : { label: this.i18n.t('me.deleteConfirmEmail'), type: 'text' }
     });
     if (!password) return;
     try {

@@ -35,6 +35,28 @@ export class OrganizerPage implements OnInit {
   memberName = (id: string) => this.data()?.members.find(m => m._id === id)?.name ?? this.i18n.t('card.formerPlayer');
   wa = whatsappLink;
 
+  /** "Active 2h ago" / "Not active yet". */
+  activeLabel(iso: string | null) {
+    return iso ? this.i18n.t('org.lastSeen', { t: this.i18n.duration(Date.now() - new Date(iso).getTime()) }) : this.i18n.t('org.neverSeen');
+  }
+
+  statTiles = computed(() => {
+    const s = this.data()?.stats;
+    if (!s) return [];
+    const of = (n: number) => `${n}/${s.members}`;
+    const pc = (n: number | null) => (n === null ? '–' : `${n}%`);
+    return [
+      { label: 'org.active7', value: of(s.active7) },
+      { label: 'org.active30', value: of(s.active30) },
+      { label: 'org.pushOn', value: of(s.pushOn) },
+      { label: 'org.replyRate', value: pc(s.replyRate) },
+      { label: 'org.seenRate', value: pc(s.seenRate) },
+      { label: 'org.ratingRate', value: pc(s.ratingRate) },
+      { label: 'org.pollTurnout', value: pc(s.pollTurnout) },
+      { label: 'org.google', value: of(s.google) }
+    ];
+  });
+
   async ngOnInit() {
     await this.load();
   }
@@ -67,8 +89,6 @@ export class OrganizerPage implements OnInit {
         groupName: this.settings.groupName,
         lateGraceMinutes: Number(this.settings.lateGraceMinutes),
         defaultCapacity: Number(this.settings.defaultCapacity),
-        defaultPrice: Number(this.settings.defaultPrice),
-        currency: this.settings.currency,
         ratingWindowHours: Number(this.settings.ratingWindowHours)
       });
       this.data.update(d => (d ? { ...d, settings: s } : d));
@@ -97,7 +117,7 @@ export class OrganizerPage implements OnInit {
     this.busy.set(true);
     try {
       const updated = await this.api.setAdjustment(m._id, this.adjValue(), this.adjValue() === 0 ? null : this.adjReason());
-      this.data.update(d => (d ? { ...d, members: d.members.map(x => (x._id === m._id ? updated : x)) } : d));
+      this.data.update(d => (d ? { ...d, members: d.members.map(x => (x._id === m._id ? { ...updated, usage: x.usage } : x)) } : d));
       this.ui.toast(this.i18n.t('app.saved'));
     } catch (err) { this.ui.error(err); } finally { this.busy.set(false); }
   }

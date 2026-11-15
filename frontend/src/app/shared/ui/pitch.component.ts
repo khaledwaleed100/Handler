@@ -49,7 +49,7 @@ interface Slot { id: string; side: Side }
       <span class="pitch-label bottom-3 end-3" [ngClass]="landscape() ? 'md:bottom-auto md:top-3' : ''"
             [style.background]="'color-mix(in srgb, var(--team-b) 80%, black)'">{{ 'match.teamB' | t }}</span>
 
-      <div class="absolute inset-0 z-10 flex flex-col px-1 py-9" [ngClass]="landscape() ? 'md:flex-row md:px-10 md:py-4' : ''">
+      <div class="absolute inset-0 z-10 flex flex-col px-1 py-8" [ngClass]="landscape() ? 'md:flex-row md:px-10 md:py-4' : ''">
         <!-- Team A half: back line (GK + DEF) near its goal, front line (MID + FWD) near halfway -->
         <div class="flex flex-1 flex-col justify-around" [ngClass]="landscape() ? 'md:flex-row' : ''">
           @for (line of lines().A; track $index) {
@@ -62,6 +62,8 @@ interface Slot { id: string; side: Side }
             }
           }
         </div>
+        <!-- Empty strip on the halfway line where the VS badge sits; cards can't go here. -->
+        <div class="h-12 shrink-0" [ngClass]="landscape() ? 'md:h-auto md:w-20' : ''" aria-hidden="true"></div>
         <!-- Team B half: mirrored -->
         <div class="flex flex-1 flex-col justify-around" [ngClass]="landscape() ? 'md:flex-row' : ''">
           @for (line of lines().B; track $index) {

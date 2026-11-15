@@ -158,6 +158,16 @@
           }
         }
       </div>
+      <div class="row-link">
+        <span class="text-lg">✉️</span>
+        <span class="min-w-0 flex-1">
+          <span class="block font-semibold">{{ 'me.emails' | t }}</span>
+          <span class="text-xs muted">{{ 'me.emailsHint' | t }}</span>
+        </span>
+        <button class="btn btn-sm" [ngClass]="auth.user()?.preferences?.emailNotifications !== false ? 'btn-primary' : 'btn-ghost'" (click)="toggleEmails()">
+          {{ (auth.user()?.preferences?.emailNotifications !== false ? 'me.notifOn' : 'me.notifOff') | t }}
+        </button>
+      </div>
       @if (!pwa.installed()) {
         <button class="row-link w-full text-start" (click)="install()">
           <app-icon name="download" />
@@ -170,7 +180,7 @@
     <!-- Account -->
     <h2 class="section-title">{{ 'me.account' | t }}</h2>
     <div class="card">
-      <button class="row-link w-full text-start" (click)="changePassword()"><app-icon name="lock" /><span class="flex-1 font-semibold">{{ 'me.changePassword' | t }}</span></button>
+      <button class="row-link w-full text-start" (click)="changePassword()"><app-icon name="lock" /><span class="flex-1 font-semibold">{{ (auth.user()?.hasPassword ? 'me.changePassword' : 'me.setPassword') | t }}</span></button>
       @if (!auth.isOrganizer()) {
         <div class="row-link flex-col !items-stretch">
           <span class="font-semibold">{{ 'me.feedback' | t }}</span>

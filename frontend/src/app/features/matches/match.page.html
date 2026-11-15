@@ -26,7 +26,7 @@
 
     <!-- ── Upcoming: reply card ──────────────────── -->
     @if (m.status === 'upcoming') {
-      <app-rsvp-card [match]="m" [currency]="currency()" [showLink]="false" (changed)="match.set($event)" />
+      <app-rsvp-card [match]="m" [showLink]="false" (changed)="match.set($event)" />
     }
 
     <!-- ── Completed: scoreboard ─────────────────── -->
@@ -94,7 +94,7 @@
       <div class="seg mt-5">
         @for (t of tabs(); track t) {
           <button [class.on]="tab() === t" (click)="tab.set(t)">
-            {{ ('match.tab' + (t === 'players' ? 'Players' : t === 'teams' ? 'Teams' : t === 'checkin' ? 'Checkin' : t === 'result' ? 'Result' : 'Money')) | t }}
+            {{ ('match.tab' + (t === 'players' ? 'Players' : t === 'teams' ? 'Teams' : t === 'checkin' ? 'Checkin' : 'Result')) | t }}
           </button>
         }
       </div>
@@ -104,6 +104,49 @@
 
           <!-- Players -->
           @case ('players') {
+            <!-- Notify the group -->
+            <div class="card card-pad">
+              <div class="mb-1 font-black">{{ 'match.notifyTitle' | t }}</div>
+              <p class="hint !mt-0 mb-3">{{ 'match.notifyHow' | t }}</p>
+              <div class="grid grid-cols-3 gap-2">
+                @for (n of notifyKinds; track n.kind) {
+                  <button class="sunk flex flex-col items-center gap-1 px-1 py-3 text-center transition"
+                          [ngClass]="notifyOpen() === n.kind ? 'ring-2 ring-[var(--primary)]' : ''"
+                          (click)="notifyOpen.set(notifyOpen() === n.kind ? null : n.kind)">
+                    <span class="text-2xl">{{ n.icon }}</span>
+                    <span class="text-xs font-bold leading-tight">{{ n.label | t }}</span>
+                  </button>
+                }
+              </div>
+              @if (notifyOpen(); as k) {
+                <div class="mt-3 rise">
+                  @for (n of notifyKinds; track n.kind) {
+                    @if (n.kind === k) { <p class="text-xs font-semibold muted">→ {{ n.hint | t }} @if (lastSent(k)) { · {{ lastSent(k) }} }</p> }
+                  }
+                  <textarea class="input mt-2" rows="2" maxlength="200" [(ngModel)]="notifyNote"
+                            [placeholder]="('match.notifyPlaceholder' | t) + (k === 'message' ? '' : ' (' + ('app.optional' | t) + ')')"></textarea>
+                  <div class="mt-2 grid grid-cols-2 gap-2">
+                    <button class="btn btn-sm btn-ghost" (click)="shareInvite()">💬 WhatsApp</button>
+                    <button class="btn btn-sm btn-primary" [disabled]="busy() || (k === 'message' && notifyNote.trim().length < 2)" (click)="sendNotify(k)">{{ 'match.notifySend' | t }}</button>
+                  </div>
+                </div>
+              }
+            </div>
+
+            <!-- Who hasn't answered, and whether they've even opened it -->
+            @if (unanswered().length) {
+              <div class="section-title">{{ 'match.noReplyTitle' | t }} · {{ unanswered().length }}</div>
+              <div class="card">
+                @for (p of unanswered(); track p._id) {
+                  <div class="row-link !py-2">
+                    <app-avatar [url]="p.avatarUrl" [name]="p.name" [size]="2.25" />
+                    <span class="min-w-0 flex-1 truncate font-semibold">{{ p.name }}</span>
+                    <span class="chip" [ngClass]="seenOf(p._id) ? 'chip-warn' : ''">{{ (seenOf(p._id) ? 'match.seen' : 'match.notSeen') | t }}</span>
+                  </div>
+                }
+              </div>
+            }
+
             <ng-container [ngTemplateOutlet]="rsvpLists" [ngTemplateOutletContext]="{ m: m, editable: true }" />
             @if (unanswered().length) {
               <div class="section-title">{{ 'match.addPlayer' | t }}</div>
@@ -119,7 +162,6 @@
                 </div>
               </div>
             }
-            <button class="btn btn-soft btn-block mt-4" (click)="shareInvite()"><app-icon name="share" [size]="18" /> {{ 'match.shareInvite' | t }}</button>
           }
 
           <!-- Teams -->
@@ -234,23 +276,6 @@
             }
           }
 
-          <!-- Money -->
-          @case ('money') {
-            <div class="mb-3 flex items-center justify-between text-sm font-bold">
-              <span>{{ 'match.totalPaid' | t: { paid: paidCount(), total: played().length } }}</span>
-              <span class="muted">{{ i18n.money(m.price, currency()) }}</span>
-            </div>
-            <div class="card">
-              @for (id of played(); track id) {
-                <button class="row-link w-full text-start" (click)="togglePaid(id)" [disabled]="busy()">
-                  <app-avatar [url]="players()[id]?.avatarUrl" [name]="name(id)" [size]="2.25" />
-                  <span class="min-w-0 flex-1 truncate font-semibold">{{ name(id) }}</span>
-                  <span class="chip" [ngClass]="paidOf(id) ? 'chip-primary' : 'chip-danger'">{{ (paidOf(id) ? 'match.paid' : 'match.unpaid') | t }}</span>
-                </button>
-              }
-              @if (!played().length) { <p class="card-pad text-center text-sm muted">{{ 'match.teamsHidden' | t }}</p> }
-            </div>
-          }
         }
       </div>
 

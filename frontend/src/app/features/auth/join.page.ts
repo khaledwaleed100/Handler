@@ -8,6 +8,7 @@ import { errorMessage } from '../../core/http';
 import { Attributes, POSITIONS, Position } from '../../core/models';
 import { AuthShellComponent } from './auth-shell.component';
 import { SelfRatingComponent } from '../../shared/ui/self-rating.component';
+import { GoogleButtonComponent } from '../../shared/ui/google-button.component';
 
 /**
  * Sign-up through the invite link, in 3 short steps:
@@ -18,7 +19,7 @@ import { SelfRatingComponent } from '../../shared/ui/self-rating.component';
 @Component({
   selector: 'app-join',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, RouterLink, NgClass, TPipe, AuthShellComponent, SelfRatingComponent],
+  imports: [FormsModule, RouterLink, NgClass, TPipe, AuthShellComponent, SelfRatingComponent, GoogleButtonComponent],
   template: `
     <app-auth-shell [title]="group() ? ('auth.join' | t: { group: group() }) : ('auth.joinTitle' | t)">
       @switch (inviteState()) {
@@ -40,15 +41,29 @@ import { SelfRatingComponent } from '../../shared/ui/self-rating.component';
 
           <form (ngSubmit)="next()" class="rise">
             @if (step() === 1) {
+              @if (googleEmail()) {
+                <p class="card card-pad mb-4 flex items-center gap-2 text-sm"><span class="text-lg">✅</span> {{ 'auth.googleAs' | t: { email: googleEmail() } }}</p>
+              } @else {
+                <app-google-button (credential)="onGoogle($event)" />
+              }
               <label class="field"><span>{{ 'auth.name' | t }}</span>
                 <input class="input" name="name" [(ngModel)]="name" required minlength="2" maxlength="40" autocomplete="name" /></label>
-              <label class="field"><span>{{ 'auth.email' | t }}</span>
-                <input class="input" type="email" name="email" [(ngModel)]="email" required autocomplete="email" inputmode="email" /></label>
+              @if (!googleEmail()) {
+                <label class="field"><span>{{ 'auth.email' | t }}</span>
+                  <input class="input" type="email" name="email" [(ngModel)]="email" required autocomplete="email" inputmode="email" /></label>
+              }
               <label class="field"><span>{{ 'auth.phone' | t }}</span>
                 <input class="input" type="tel" name="phone" [(ngModel)]="phone" required autocomplete="tel" inputmode="tel" dir="ltr" placeholder="+20 1xx xxx xxxx" /></label>
-              <label class="field"><span>{{ 'auth.newPassword' | t }}</span>
-                <input class="input" type="password" name="password" [(ngModel)]="password" required minlength="8" autocomplete="new-password" />
-                <p class="hint">{{ 'auth.passwordHint' | t }}</p></label>
+              @if (!googleEmail() && inviteState() === 'organizer') {
+                <label class="field"><span>{{ 'auth.setupCode' | t }}</span>
+                  <input class="input" name="setupCode" [(ngModel)]="setupCode" required autocomplete="off" dir="ltr" />
+                  <p class="hint">{{ 'auth.setupCodeHint' | t }}</p></label>
+              }
+              @if (!googleEmail()) {
+                <label class="field"><span>{{ 'auth.newPassword' | t }}</span>
+                  <input class="input" type="password" name="password" [(ngModel)]="password" required minlength="8" autocomplete="new-password" />
+                  <p class="hint">{{ 'auth.passwordHint' | t }}</p></label>
+              }
             }
 
             @if (step() === 2) {
@@ -111,8 +126,13 @@ export class JoinPage implements OnInit {
   position = signal<Position | null>(null);
   selfRating = signal<Attributes>({ pace: 60, attack: 60, passing: 60, defence: 60, physical: 60, goalkeeping: 50 });
   consent = signal(false);
+  /** Set when the person chose "Continue with Google": no email/password fields then. */
+  googleEmail = signal('');
+  setupCode = signal('');
 
   async ngOnInit() {
+    const pending = this.auth.googleSignup();
+    if (pending?.email) this.useGoogle(pending.name || '', pending.email);
     // "/join/organizer" is how the organizer creates the first account (no invite needed).
     if (this.code() === 'organizer') { this.inviteState.set('organizer'); return; }
     try {
@@ -124,8 +144,29 @@ export class JoinPage implements OnInit {
     }
   }
 
+  private useGoogle(name: string, email: string) {
+    this.googleEmail.set(email);
+    if (!this.name()) this.name.set(name);
+  }
+
+  async onGoogle(credential: string) {
+    this.error.set('');
+    this.busy.set(true);
+    try {
+      const pending = await this.auth.google(credential, this.inviteState() === 'organizer' ? undefined : this.code());
+      if (!pending) { await this.router.navigate(['/home']); return; } // already had an account
+      this.useGoogle(pending.name || '', pending.email || '');
+    } catch (err) {
+      this.error.set(errorMessage(err, this.i18n.t('app.error')));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
   canContinue() {
-    if (this.step() === 1) return this.name().trim().length >= 2 && /\S+@\S+\.\S+/.test(this.email()) && this.phone().trim().length >= 7 && this.password().length >= 8;
+    if (this.step() === 1 && this.googleEmail()) return this.name().trim().length >= 2 && this.phone().trim().length >= 7;
+    if (this.step() === 1) return this.name().trim().length >= 2 && /\S+@\S+\.\S+/.test(this.email()) && this.phone().trim().length >= 7 && this.password().length >= 8
+      && (this.inviteState() !== 'organizer' || this.setupCode().trim().length >= 8);
     if (this.step() === 2) return !!this.position();
     return this.consent();
   }
@@ -135,6 +176,14 @@ export class JoinPage implements OnInit {
     if (this.step() < 3) { this.step.set(this.step() + 1); return; }
     this.busy.set(true);
     try {
+      if (this.googleEmail()) {
+        await this.auth.googleComplete({
+          name: this.name().trim(), phone: this.phone().trim(), position: this.position(),
+          selfRating: this.selfRating(), consent: this.consent(), lang: this.i18n.lang()
+        });
+        await this.router.navigate(['/home']);
+        return;
+      }
       await this.auth.register({
         name: this.name().trim(),
         email: this.email().trim(),
@@ -144,6 +193,7 @@ export class JoinPage implements OnInit {
         selfRating: this.selfRating(),
         consent: this.consent(),
         inviteCode: this.inviteState() === 'organizer' ? undefined : this.code(),
+        setupCode: this.inviteState() === 'organizer' ? this.setupCode().trim() : undefined,
         lang: this.i18n.lang()
       });
       await this.router.navigate(['/home']);

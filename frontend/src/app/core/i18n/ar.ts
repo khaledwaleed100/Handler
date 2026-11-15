@@ -2,7 +2,7 @@ import { Dict } from './en';
 
 /** Arabic strings. Must have exactly the same keys as en.ts (TypeScript checks this). */
 export const ar: Dict = {
-  app: { name: 'خماسي', waking: 'جارٍ تشغيل السيرفر…', offline: 'أنت غير متصل بالإنترنت', retry: 'حاول مرة أخرى', loading: 'جارٍ التحميل…', save: 'حفظ', saved: 'تم الحفظ', cancel: 'إلغاء', close: 'إغلاق', back: 'رجوع', next: 'التالي', done: 'تم', delete: 'حذف', edit: 'تعديل', yes: 'نعم', no: 'لا', or: 'أو', optional: 'اختياري', copy: 'نسخ', copied: 'تم النسخ', share: 'مشاركة', error: 'حدث خطأ ما', confirm: 'هل أنت متأكد؟' },
+  app: { name: 'The Handler', waking: 'جارٍ تشغيل السيرفر…', offline: 'أنت غير متصل بالإنترنت', retry: 'حاول مرة أخرى', loading: 'جارٍ التحميل…', save: 'حفظ', saved: 'تم الحفظ', cancel: 'إلغاء', close: 'إغلاق', back: 'رجوع', next: 'التالي', done: 'تم', delete: 'حذف', edit: 'تعديل', yes: 'نعم', no: 'لا', or: 'أو', optional: 'اختياري', copy: 'نسخ', copied: 'تم النسخ', share: 'مشاركة', error: 'حدث خطأ ما', confirm: 'هل أنت متأكد؟' },
   nav: { home: 'الرئيسية', matches: 'الماتشات', squad: 'اللاعبين', vote: 'التصويت', me: 'حسابي', organizer: 'المنظم' },
   pos: { GK: 'حارس مرمى', DEF: 'مدافع', MID: 'وسط', FWD: 'مهاجم', short_GK: 'حارس', short_DEF: 'دفاع', short_MID: 'وسط', short_FWD: 'هجوم' },
   attr: { pace: 'السرعة', attack: 'الهجوم', passing: 'التمرير', defence: 'الدفاع', physical: 'القوة البدنية', goalkeeping: 'حراسة المرمى', short_pace: 'سرعة', short_attack: 'هجوم', short_passing: 'تمرير', short_defence: 'دفاع', short_physical: 'قوة', short_goalkeeping: 'حراسة' },
@@ -10,6 +10,7 @@ export const ar: Dict = {
   card: { provisional: 'مبدئي', provisionalHint: 'لا توجد تقييمات كافية بعد', matches: 'ماتشات', goals: 'أهداف', assists: 'صناعة', wins: 'فوز', mvps: 'أفضل لاعب', form: 'آخر نتائج', formerPlayer: 'لاعب سابق' },
 
   auth: {
+    googleAs: 'تم الدخول بجوجل: {email}', setupCode: 'رمز إعداد المنظم', setupCodeHint: 'الرمز ORGANIZER_SETUP_CODE المضبوط على السيرفر. غير مطلوب مع جوجل.',
     welcome: 'أهلاً بعودتك', signIn: 'تسجيل الدخول', signingIn: 'جارٍ الدخول…', email: 'البريد الإلكتروني', password: 'كلمة المرور', forgot: 'نسيت كلمة المرور؟',
     noAccount: 'ليس لديك حساب؟ اطلب رابط الدعوة من المنظم.', join: 'انضم إلى {group}', joinTitle: 'أنشئ لاعبك',
     invalidInvite: 'رابط الدعوة هذا لم يعد صالحاً. اطلب رابطاً جديداً من المنظم.', checkingInvite: 'جارٍ التحقق من الدعوة…',
@@ -32,6 +33,7 @@ export const ar: Dict = {
   },
 
   match: {
+    notifyTitle: 'أرسل تنبيهاً للمجموعة', notifyAsk: 'اسأل مين جاي', notifyAskHint: 'كل من لم يرد بعد', notifySoon: 'الماتش قرب', notifySoonHint: 'اللاعبين المؤكدين', notifyMessage: 'أرسل رسالة', notifyMessageHint: 'كل من في الماتش', notifyPlaceholder: 'رسالتك…', notifySend: 'إرسال', notifySent: 'تم الإرسال إلى {n} أشخاص', notifyLast: 'آخر إرسال منذ {t}', notifyHow: 'يصل كإشعار على الهاتف وكبريد إلكتروني.', notifyWhatsapp: 'انشر في جروب الواتساب', seen: 'شاف', notSeen: 'لم يشاهد', noReplyTitle: 'لم يرد بعد',
     upcoming: 'القادمة', past: 'السابقة', newMatch: 'ماتش جديد', place: 'المكان', mapLink: 'رابط الخريطة', date: 'التاريخ', time: 'موعد البداية', capacity: 'عدد اللاعبين', price: 'السعر للفرد',
     create: 'إنشاء الماتش', creating: 'جارٍ الإنشاء…', created: 'تم إنشاء الماتش وإبلاغ الجميع.', none: 'لا توجد ماتشات هنا بعد', cancelled: 'ملغي', completed: 'انتهى',
     addToCalendar: 'أضف للتقويم', directions: 'الاتجاهات', shareInvite: 'شارك على واتساب', confirmed: 'مؤكد', waitlist: 'الانتظار', maybe: 'يمكن', out: 'معتذر', noReply: 'لم يرد بعد',
@@ -60,6 +62,7 @@ export const ar: Dict = {
   squad: { title: 'اللاعبين', search: 'ابحث عن لاعب', all: 'الكل', sortOverall: 'التقييم', sortGoals: 'الأهداف', sortName: 'الاسم', empty: 'لا يوجد لاعبون', recent: 'آخر الماتشات', noRecent: 'لا توجد ماتشات بعد' },
 
   me: {
+    emails: 'البريد الإلكتروني', emailsHint: 'التحديثات المهمة على البريد أيضاً', setPassword: 'أضف كلمة مرور', deleteConfirmEmail: 'اكتب بريدك لحذف حسابك',
     title: 'حسابي', ratingHow: 'كيف يُحسب تقييمك', fromSelf: 'تقييمك لنفسك', fromPeers: 'زملاؤك ({n} أشخاص)', fromResults: 'النتائج', peersPending: 'يظهر بعد أن يقيّمك 4 أشخاص مختلفين',
     adjustment: 'تعديل المنظم: {n}', punctuality: 'الالتزام بالمواعيد', onTimeOf: 'في الموعد {a} من آخر {b}', lateDrops: '{n} اعتذارات متأخرة', noRecord: 'لا يوجد تسجيل حضور بعد',
     dispute: 'هذا خطأ', disputeNote: 'ماذا حدث؟', sendDispute: 'أرسل للمنظم', pending: 'في انتظار المنظم', accepted: 'تم التصحيح ✅', rejected: 'أبقاه المنظم',
@@ -73,6 +76,7 @@ export const ar: Dict = {
   },
 
   org: {
+    usage: 'استخدام التطبيق', usageHint: 'آخر {n} ماتشات. أرقام فقط، بدون إجابات أي شخص.', active7: 'نشط هذا الأسبوع', active30: 'نشط هذا الشهر', pushOn: 'الإشعارات مفعّلة', replyRate: 'الرد على الماتشات', seenRate: 'فتح صفحة الماتش', ratingRate: 'إكمال التقييم', pollTurnout: 'التصويت', lastSeen: 'نشط منذ {t}', neverSeen: 'لم يدخل بعد', repliedOf: 'رد على {a} من آخر {b} ماتشات', google: 'جوجل',
     title: 'المنظم', invite: 'رابط الدعوة', inviteHint: 'أي شخص معه هذا الرابط يمكنه الانضمام. غيّره لو انتشر.', resetInvite: 'غيّر الرابط', resetConfirm: 'الرابط القديم سيتوقف عن العمل. متابعة؟',
     inviteMessage: 'انضم لمجموعة الخماسي: {link}',
     settings: 'إعدادات المجموعة', groupName: 'اسم المجموعة', grace: 'دقائق السماح قبل اعتبار اللاعب متأخراً', defaultCapacity: 'عدد اللاعبين الافتراضي', defaultPrice: 'السعر الافتراضي للفرد', currency: 'العملة', ratingWindow: 'مدة جولة التقييم (ساعات)',

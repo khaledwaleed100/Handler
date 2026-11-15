@@ -5,13 +5,15 @@ import { AuthService } from '../../core/auth.service';
 import { I18n, TPipe } from '../../core/i18n/i18n.service';
 import { errorMessage } from '../../core/http';
 import { AuthShellComponent } from './auth-shell.component';
+import { GoogleButtonComponent } from '../../shared/ui/google-button.component';
 
 @Component({
   selector: 'app-login',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, RouterLink, TPipe, AuthShellComponent],
+  imports: [FormsModule, RouterLink, TPipe, AuthShellComponent, GoogleButtonComponent],
   template: `
     <app-auth-shell [title]="'auth.welcome' | t">
+      <app-google-button (credential)="onGoogle($event)" />
       <form (ngSubmit)="submit()" class="rise">
         <label class="field">
           <span>{{ 'auth.email' | t }}</span>
@@ -41,13 +43,32 @@ export class LoginPage {
   busy = signal(false);
   error = signal('');
 
+  async onGoogle(credential: string) {
+    this.busy.set(true);
+    this.error.set('');
+    try {
+      const pending = await this.auth.google(credential);
+      // Only the organizer's email can reach here without an account (no invite needed).
+      if (pending) { await this.router.navigate(['/join', 'organizer']); return; }
+      await this.goHome();
+    } catch (err) {
+      this.error.set(errorMessage(err, this.i18n.t('app.error')));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  private async goHome() {
+    const target = this.returnUrl();
+    await this.router.navigateByUrl(target && target.startsWith('/') && !target.startsWith('//') ? target : '/home');
+  }
+
   async submit() {
     this.busy.set(true);
     this.error.set('');
     try {
       await this.auth.login(this.email().trim(), this.password());
-      const target = this.returnUrl();
-      await this.router.navigateByUrl(target && target.startsWith('/') && !target.startsWith('//') ? target : '/home');
+      await this.goHome();
     } catch (err) {
       this.error.set(errorMessage(err, this.i18n.t('app.error')));
     } finally {
