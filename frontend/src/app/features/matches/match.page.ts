@@ -58,6 +58,8 @@ export class MatchPage implements OnInit {
   // Organizer: everyone in the squad, for "add a player"
   squad = signal<PublicPlayer[]>([]);
   addPick = '';
+  /** Organizer's starred players: listed first and addable with one tap. */
+  favorites = signal<Set<string>>(new Set());
 
   isOrg = computed(() => this.auth.isOrganizer());
   players = computed(() => ({ ...(this.match()?.players ?? {}), ...this.extraPlayers() }));
@@ -90,8 +92,10 @@ export class MatchPage implements OnInit {
     const m = this.match();
     if (!m) return [];
     const answered = new Set([...m.rsvp.confirmed, ...m.rsvp.waitlist, ...m.rsvp.maybe, ...m.rsvp.out]);
-    return this.squad().filter(p => !answered.has(p._id));
+    const fav = this.favorites();
+    return this.squad().filter(p => !answered.has(p._id)).sort((a, b) => Number(fav.has(b._id)) - Number(fav.has(a._id)));
   });
+  favoriteUnanswered = computed(() => this.unanswered().filter(p => this.favorites().has(p._id)));
   tabs = computed<Tab[]>(() => {
     const m = this.match();
     if (!m) return [];
@@ -110,7 +114,10 @@ export class MatchPage implements OnInit {
       this.setMatch(m);
       const wanted = this.tabParam();
       this.tab.set(wanted && this.tabs().includes(wanted) ? wanted : this.tabs()[0]);
-      if (this.isOrg()) this.api.players().then(list => this.squad.set(list)).catch(() => {});
+      if (this.isOrg()) {
+        this.api.players().then(list => this.squad.set(list)).catch(() => {});
+        this.api.favorites().then(ids => this.favorites.set(new Set(ids))).catch(() => {});
+      }
     } catch (err) {
       this.ui.error(err);
     } finally {
@@ -151,10 +158,9 @@ export class MatchPage implements OnInit {
   setStatus(playerId: string, status: RsvpStatus | 'remove') {
     this.run(() => this.api.setRoster(this.id(), playerId, status));
   }
-  addPlayer(status: RsvpStatus) {
-    if (!this.addPick) return;
-    const id = this.addPick;
-    this.addPick = '';
+  addPlayer(status: RsvpStatus, id = this.addPick) {
+    if (!id) return;
+    if (id === this.addPick) this.addPick = '';
     const p = this.squad().find(x => x._id === id);
     if (p) this.extraPlayers.update(x => ({ ...x, [id]: p }));
     this.setStatus(id, status);
@@ -261,7 +267,8 @@ export class MatchPage implements OnInit {
   readonly notifyKinds: { kind: NotifyKind; icon: string; label: string; hint: string }[] = [
     { kind: 'ask', icon: '🙋', label: 'match.notifyAsk', hint: 'match.notifyAskHint' },
     { kind: 'soon', icon: '⏱', label: 'match.notifySoon', hint: 'match.notifySoonHint' },
-    { kind: 'message', icon: '📣', label: 'match.notifyMessage', hint: 'match.notifyMessageHint' }
+    { kind: 'message', icon: '📣', label: 'match.notifyMessage', hint: 'match.notifyMessageHint' },
+    { kind: 'details', icon: '✉️', label: 'match.notifyDetails', hint: 'match.notifyDetailsHint' }
   ];
 
   lastSent(kind: NotifyKind) {
@@ -285,6 +292,9 @@ export class MatchPage implements OnInit {
   }
 
   // ── Match actions ────────────────────────────────────
+  setRepeat(repeatWeekly: boolean) {
+    this.run(() => this.api.updateMatch(this.id(), { repeatWeekly }), this.i18n.t('app.saved'));
+  }
   async cancelMatch() {
     const ok = await this.ui.confirm({ title: this.i18n.t('match.cancelMatch'), body: this.i18n.t('match.cancelConfirm'), confirm: this.i18n.t('match.cancelMatch'), danger: true });
     if (ok) this.run(() => this.api.updateMatch(this.id(), { cancelled: true }));

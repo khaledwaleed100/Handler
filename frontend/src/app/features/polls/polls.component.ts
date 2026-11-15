@@ -4,17 +4,20 @@ import { Poll, PollCandidate, PollService, PollStatus, PollType } from '../../co
 import { AuthService } from '../../core/auth.service';
 import { I18n, TPipe } from '../../core/i18n/i18n.service';
 import { Ui } from '../../core/ui.service';
+import { Api } from '../../core/api.service';
 import { AvatarComponent } from '../../shared/ui/avatar.component';
+import { IconComponent } from '../../shared/ui/icon.component';
 
 /**
- * Player of the Week / Month voting.
+ * Player of the Week / Month and Team of the Week voting.
  * Two-step vote (tap, then confirm) so nobody votes by accident; results update live.
+ * A closed poll shows a congratulations card that can be shared as a picture.
  * The organizer can start and end polls from here.
  */
 @Component({
   selector: 'app-polls',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgClass, TPipe, AvatarComponent],
+  imports: [NgClass, TPipe, AvatarComponent, IconComponent],
   template: `
     <div class="page">
       <header class="mb-4">
@@ -67,27 +70,60 @@ import { AvatarComponent } from '../../shared/ui/avatar.component';
             <p class="relative text-xs font-semibold opacity-90">{{ 'poll.votes' | t: { n: poll.totalVotes } }}</p>
           </div>
 
-          @if (!poll.isActive && winnerOf(poll); as w) {
-            <div class="card card-pad mb-3 flex items-center gap-3 pop">
-              <span class="text-3xl">👑</span>
-              <div class="min-w-0 flex-1">
-                <div class="text-[11px] font-black uppercase tracking-wider text-amber-500">{{ 'poll.winner' | t }}</div>
-                <div class="truncate text-lg font-black">{{ w.name }}</div>
+          @let winners = winnersOf(poll);
+          @if (!poll.isActive && winners.length) {
+            <div class="mb-3 pop">
+              <!-- The congratulations card: this box is what gets shared as a picture. -->
+              <div [id]="'card-' + poll._id" class="relative overflow-hidden rounded-3xl p-6 text-center text-white"
+                   style="background: linear-gradient(145deg, #f59e0b, #ea580c 55%, #be123c)">
+                <div class="text-[11px] font-black uppercase tracking-[0.2em] opacity-90">{{ groupName() }}</div>
+                <div class="mt-1 text-2xl font-black">🏆 {{ titleOf(poll) }}</div>
+                @if (poll.picks === 1) {
+                  @let w = winners[0];
+                  <div class="mx-auto mt-4 w-fit rounded-full p-1.5" style="background: rgba(255,255,255,.3)">
+                    <app-avatar [url]="w.avatarUrl" [name]="w.name" [size]="7" />
+                  </div>
+                  <div class="mt-3 text-3xl font-black leading-tight">{{ 'poll.congrats' | t: { name: w.name } }}</div>
+                  <div class="mt-1 text-sm font-semibold opacity-90">{{ 'poll.congratsSub' | t: { title: titleOf(poll) } }}</div>
+                  <div class="mt-4 flex flex-wrap justify-center gap-2 text-sm font-black num">
+                    <span class="rounded-full bg-black/20 px-3 py-1">⚽ {{ w.goals }}</span>
+                    <span class="rounded-full bg-black/20 px-3 py-1">👟 {{ w.assists }}</span>
+                    <span class="rounded-full bg-black/20 px-3 py-1">⭐ {{ w.avgRating.toFixed(1) }}</span>
+                    <span class="rounded-full bg-black/20 px-3 py-1">🗳️ {{ w.votes }}</span>
+                  </div>
+                } @else {
+                  <div class="mt-4 flex flex-wrap justify-center gap-x-3 gap-y-4">
+                    @for (w of winners; track w._id) {
+                      <div class="w-[4.75rem]">
+                        <div class="mx-auto w-fit rounded-full p-1" style="background: rgba(255,255,255,.3)">
+                          <app-avatar [url]="w.avatarUrl" [name]="w.name" [size]="3.5" />
+                        </div>
+                        <div class="mt-1 truncate text-xs font-black">{{ w.name }}</div>
+                        <div class="text-[10px] font-bold opacity-90">{{ ('pos.short_' + w.position) | t }} · 🗳️ {{ w.votes }}</div>
+                      </div>
+                    }
+                  </div>
+                  <div class="mt-4 text-sm font-semibold opacity-90">{{ 'poll.congratsSub' | t: { title: titleOf(poll) } }}</div>
+                }
               </div>
-              <span class="font-black num">{{ w.votes }} 🗳️</span>
+              <button class="btn btn-soft btn-block mt-2" [disabled]="sharing()" (click)="shareCard(poll)">
+                <app-icon name="share" [size]="18" /> {{ 'poll.shareCard' | t }}
+              </button>
             </div>
           }
 
           @if (poll.isActive && !poll.hasVoted) {
-            <p class="mb-2 px-1 text-xs font-bold uppercase tracking-wider muted">{{ 'poll.tapThenConfirm' | t }}</p>
+            <p class="mb-2 px-1 text-xs font-bold uppercase tracking-wider muted">
+              {{ poll.picks > 1 ? ('poll.pickUpTo' | t: { n: poll.picks }) : ('poll.tapThenConfirm' | t) }}
+            </p>
           }
 
-          <div class="flex flex-col gap-2" role="radiogroup">
+          <div class="flex flex-col gap-2" [attr.role]="poll.picks > 1 ? 'group' : 'radiogroup'">
             @for (c of poll.candidates; track c._id; let i = $index) {
-              <button type="button" role="radio" class="card relative flex min-h-[4.75rem] items-center gap-3 overflow-hidden px-3.5 py-3 text-start transition"
-                      [attr.aria-checked]="isPicked(poll, c) || poll.myVote === c._id"
+              <button type="button" [attr.role]="poll.picks > 1 ? 'checkbox' : 'radio'" class="card relative flex min-h-[4.75rem] items-center gap-3 overflow-hidden px-3.5 py-3 text-start transition"
+                      [attr.aria-checked]="isPicked(poll, c) || poll.myVotes.includes(c._id)"
                       [disabled]="!canVote(poll) || voting()"
-                      [ngClass]="isPicked(poll, c) ? '!border-amber-400 ring-2 ring-amber-400' : poll.winnerId === c._id ? '!border-amber-400' : ''"
+                      [ngClass]="isPicked(poll, c) ? '!border-amber-400 ring-2 ring-amber-400' : poll.winnerIds.includes(c._id) ? '!border-amber-400' : ''"
                       (click)="pick(poll, c)">
                 @if (showResults(poll)) {
                   <span class="absolute inset-y-0 start-0 transition-all duration-700" style="background: var(--primary-soft)" [style.width.%]="c.percent"></span>
@@ -97,8 +133,8 @@ import { AvatarComponent } from '../../shared/ui/avatar.component';
                 <span class="relative min-w-0 flex-1">
                   <span class="flex items-center gap-1.5">
                     <span class="truncate text-base font-black">{{ c.name }}</span>
-                    @if (poll.winnerId === c._id) { 👑 }
-                    @if (poll.myVote === c._id) { <span class="chip chip-primary !px-1.5 !py-0 text-[10px]">{{ 'poll.you' | t }}</span> }
+                    @if (poll.winnerIds.includes(c._id)) { 👑 }
+                    @if (poll.myVotes.includes(c._id)) { <span class="chip chip-primary !px-1.5 !py-0 text-[10px]">{{ 'poll.you' | t }}</span> }
                   </span>
                   <span class="text-xs font-semibold muted">{{ ('pos.short_' + c.position) | t }} · ⚽ {{ c.goals }} · 👟 {{ c.assists }}</span>
                 </span>
@@ -138,8 +174,10 @@ import { AvatarComponent } from '../../shared/ui/avatar.component';
       <div class="fixed inset-x-0 z-30 px-4 rise" style="bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 0.5rem)">
         <div class="card mx-auto flex max-w-2xl items-center gap-3 p-3 shadow-2xl">
           <div class="min-w-0 flex-1">
-            <div class="text-[11px] font-black uppercase tracking-wider muted">{{ 'poll.yourPick' | t }}</div>
-            <div class="truncate text-lg font-black">{{ p.candidate.name }}</div>
+            <div class="text-[11px] font-black uppercase tracking-wider muted">
+              {{ p.max > 1 ? ('poll.pickedCount' | t: { n: p.candidates.length, max: p.max }) : ('poll.yourPick' | t) }}
+            </div>
+            <div class="truncate font-black" [ngClass]="p.max > 1 ? 'text-sm' : 'text-lg'">{{ pickedNames() }}</div>
           </div>
           <button class="icon-btn" (click)="picked.set(null)" [disabled]="voting()" [attr.aria-label]="'app.cancel' | t">✕</button>
           <button class="btn btn-primary" (click)="confirm()" [disabled]="voting()">{{ 'poll.confirmVote' | t }}</button>
@@ -152,10 +190,15 @@ export class PollsComponent implements OnInit, OnDestroy {
   auth = inject(AuthService);
   private ui = inject(Ui);
   private i18n = inject(I18n);
+  private api = inject(Api);
 
-  readonly types: PollType[] = ['weekly', 'monthly'];
+  readonly types: PollType[] = ['weekly', 'team', 'monthly'];
   status = signal<PollStatus | null>(null);
-  picked = signal<{ pollId: string; candidate: PollCandidate } | null>(null);
+  /** The ballot being built: one player, or up to `max` for Team of the Week. */
+  picked = signal<{ pollId: string; max: number; candidates: PollCandidate[] } | null>(null);
+  pickedNames = computed(() => (this.picked()?.candidates ?? []).map(c => c.name).join(', '));
+  groupName = signal('');
+  sharing = signal(false);
   voting = signal(false);
   busy = signal(false);
   closingId = signal<string | null>(null);
@@ -167,6 +210,7 @@ export class PollsComponent implements OnInit, OnDestroy {
     this.polls.refresh().catch(err => this.ui.error(err));
     this.polls.startLive();
     if (this.auth.isOrganizer()) this.loadStatus();
+    this.api.settings().then(s => this.groupName.set(s.groupName)).catch(() => {});
   }
 
   ngOnDestroy() {
@@ -180,13 +224,57 @@ export class PollsComponent implements OnInit, OnDestroy {
 
   canVote = (poll: Poll) => poll.isActive && !poll.hasVoted;
   showResults = (poll: Poll) => poll.hasVoted || !poll.isActive;
-  isPicked = (poll: Poll, c: PollCandidate) => this.picked()?.pollId === poll._id && this.picked()?.candidate._id === c._id;
-  winnerOf = (poll: Poll) => poll.candidates.find(c => c._id === poll.winnerId) ?? null;
+  isPicked = (poll: Poll, c: PollCandidate) => this.picked()?.pollId === poll._id && !!this.picked()?.candidates.some(x => x._id === c._id);
+  /** Crowned players in winning order. */
+  winnersOf = (poll: Poll) => poll.winnerIds.map(id => poll.candidates.find(c => c._id === id)).filter((c): c is PollCandidate => !!c);
+  titleOf = (poll: Poll) => this.i18n.t('poll.' + poll.type);
 
   pick(poll: Poll, c: PollCandidate) {
     if (!this.canVote(poll)) return;
+    const current = this.picked()?.pollId === poll._id ? this.picked()!.candidates : [];
+    let next: PollCandidate[];
+    if (current.some(x => x._id === c._id)) next = current.filter(x => x._id !== c._id);
+    else if (poll.picks === 1) next = [c];
+    else if (current.length >= poll.picks) return; // ballot is full: un-tap someone first
+    else next = [...current, c];
     this.ui.haptic();
-    this.picked.set(this.isPicked(poll, c) ? null : { pollId: poll._id, candidate: c });
+    this.picked.set(next.length ? { pollId: poll._id, max: poll.picks, candidates: next } : null);
+  }
+
+  /** Turns the congratulations card into a picture and opens the phone's share sheet (WhatsApp, email, …). */
+  async shareCard(poll: Poll) {
+    const winners = this.winnersOf(poll);
+    if (!winners.length) return;
+    const title = this.titleOf(poll);
+    const text = poll.picks === 1
+      ? this.i18n.t('poll.congratsText', { name: winners[0].name, title })
+      : this.i18n.t('poll.teamText', { title, names: winners.map(w => w.name).join(', ') });
+
+    this.sharing.set(true);
+    try {
+      let files: File[] | undefined;
+      const el = document.getElementById('card-' + poll._id);
+      if (el) {
+        try {
+          const { toBlob } = await import('html-to-image');
+          const blob = await toBlob(el, { pixelRatio: 2, cacheBust: true });
+          if (blob) files = [new File([blob], 'congrats.png', { type: 'image/png' })];
+        } catch { /* share the text only */ }
+      }
+      // Browsers that can't share a picture (most desktops): save it, so it can be attached by hand.
+      const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
+      if (files && !nav.canShare?.({ files })) {
+        const url = URL.createObjectURL(files[0]);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = files[0].name;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+      await this.ui.share(text, files);
+    } finally {
+      this.sharing.set(false);
+    }
   }
 
   async confirm() {
@@ -194,7 +282,7 @@ export class PollsComponent implements OnInit, OnDestroy {
     if (!p) return;
     this.voting.set(true);
     try {
-      await this.polls.vote(p.pollId, p.candidate._id);
+      await this.polls.vote(p.pollId, p.candidates.map(c => c._id));
       this.ui.haptic([10, 40, 10]);
       this.picked.set(null);
     } catch (err) {

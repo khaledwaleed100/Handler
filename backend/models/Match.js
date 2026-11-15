@@ -28,6 +28,9 @@ const matchSchema = new mongoose.Schema({
     kickoff: { type: Date, required: true },
     capacity: { type: Number, min: 2, max: 22, default: 10 },
     status: { type: String, enum: ['upcoming', 'completed', 'cancelled'], default: 'upcoming' },
+    // Weekly repeat: at kick-off, next week's match is created (once: repeatSpawned).
+    repeatWeekly: { type: Boolean, default: false },
+    repeatSpawned: { type: Boolean, default: false },
 
     rsvps: [rsvpSchema],
     lateDrops: [{ player: { type: ObjectId, ref: 'Player' }, at: Date, _id: false }],

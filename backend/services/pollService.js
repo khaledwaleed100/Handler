@@ -8,9 +8,14 @@ import Poll from '../models/Poll.js';
 import Match from '../models/Match.js';
 
 export const POLL_CONFIG = {
-    weekly: { matchesRequired: 3, candidateLimit: 5, title: 'Player of the Week' },
-    monthly: { matchesRequired: 12, candidateLimit: 5, title: 'Player of the Month' }
+    weekly: { matchesRequired: 3, candidateLimit: 5, picks: 1, title: 'Player of the Week' },
+    monthly: { matchesRequired: 12, candidateLimit: 5, picks: 1, title: 'Player of the Month' },
+    // Ten best performers; each voter picks up to five; the five most-voted make the team.
+    team: { matchesRequired: 3, candidateLimit: 10, picks: 5, title: 'Team of the Week' }
 };
+
+/** How many players one voter picks (and how many are crowned) in this kind of poll. */
+export const picksFor = (type) => POLL_CONFIG[type]?.picks || 1;
 
 export const isValidPollType = (type) => Object.prototype.hasOwnProperty.call(POLL_CONFIG, type);
 
@@ -74,18 +79,28 @@ export const rankCandidates = (matches, limit) => {
         .slice(0, limit);
 };
 
-/** Picks the winner: most votes, ties broken by the higher average rating. */
-export const pickWinner = (poll) => {
+/**
+ * Picks the top `count` candidates: most votes first, ties broken by the higher
+ * average rating. Empty when nobody voted.
+ */
+export const pickWinners = (poll, count = 1) => {
     const counts = new Map();
     for (const vote of poll.votes) {
         const pid = String(vote.playerId);
         counts.set(pid, (counts.get(pid) || 0) + 1);
     }
-    if (counts.size === 0) return null;
+    if (counts.size === 0) return [];
 
     const ratingOf = (pid) => poll.candidateStats.find(s => String(s.playerId) === pid)?.avgRating || 0;
-    return [...counts.entries()].sort((a, b) => b[1] - a[1] || ratingOf(b[0]) - ratingOf(a[0]))[0][0];
+    return poll.candidates
+        .filter(Boolean)
+        .map(c => String(c._id ?? c))
+        .sort((a, b) => (counts.get(b) || 0) - (counts.get(a) || 0) || ratingOf(b) - ratingOf(a))
+        .slice(0, count);
 };
+
+/** The single winner (Player of the Week / Month), or null when nobody voted. */
+export const pickWinner = (poll) => pickWinners(poll, 1)[0] ?? null;
 
 /**
  * Converts a populated Poll into what the phone needs.
@@ -93,8 +108,10 @@ export const pickWinner = (poll) => {
  */
 export const serializePoll = (poll, viewerId, canManage = false) => {
     const viewer = String(viewerId);
-    const totalVotes = poll.votes.length;
-    const myVote = poll.votes.find(vote => String(vote.userId) === viewer);
+    // Counted in people, so percentages mean "share of voters who picked this player".
+    const totalVotes = new Set(poll.votes.map(vote => String(vote.userId))).size;
+    const myVotes = poll.votes.filter(vote => String(vote.userId) === viewer).map(vote => String(vote.playerId));
+    const winnerIds = poll.winners?.length ? poll.winners.map(String) : poll.winner ? [String(poll.winner)] : [];
 
     const countByPlayer = new Map();
     for (const vote of poll.votes) {
@@ -129,10 +146,13 @@ export const serializePoll = (poll, viewerId, canManage = false) => {
         createdAt: poll.createdAt,
         closedAt: poll.closedAt,
         canManage,
-        hasVoted: !!myVote,
-        myVote: myVote ? String(myVote.playerId) : null,
+        picks: picksFor(poll.type),
+        hasVoted: myVotes.length > 0,
+        myVote: myVotes[0] ?? null,
+        myVotes,
         totalVotes,
-        winnerId: poll.winner ? String(poll.winner) : null,
+        winnerId: winnerIds[0] ?? null,
+        winnerIds,
         candidates
     };
 };

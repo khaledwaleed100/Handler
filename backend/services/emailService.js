@@ -61,7 +61,7 @@ ${link}
             <div style="font-family: system-ui, sans-serif; max-width: 480px; margin: auto; padding: 24px;">
                 <p>Hi ${escapeHtml(name)},</p>
                 <p style="font-size: 18px; font-weight: 700; margin: 16px 0 4px;">${escapeHtml(title)}</p>
-                <p style="margin: 0 0 20px;">${escapeHtml(body)}</p>
+                <p style="margin: 0 0 20px; white-space: pre-line;">${escapeHtml(body)}</p>
                 <a href="${escapeHtml(link)}" style="display: inline-block; background: #16a34a; color: #fff; padding: 12px 20px; border-radius: 12px; text-decoration: none; font-weight: 700;">Open the app</a>
                 <p style="color: #888; font-size: 12px; margin-top: 24px;">You can turn these emails off in the app: Me → App → Emails.</p>
             </div>`

@@ -58,7 +58,7 @@ export class Api {
   // Matches
   matches(scope: 'upcoming' | 'past') { return this.get<MatchList>('/matches', { scope }); }
   match(id: string) { return this.get<MatchWithPlayers>(`/matches/${id}`); }
-  createMatch(body: { place: string; mapUrl?: string; kickoff: string; capacity?: number }) { return this.post<MatchWithPlayers>('/matches', body); }
+  createMatch(body: { place: string; mapUrl?: string; kickoff: string; capacity?: number; repeatWeekly?: boolean }) { return this.post<MatchWithPlayers>('/matches', body); }
   updateMatch(id: string, body: Record<string, unknown>) { return this.put<MatchWithPlayers>(`/matches/${id}`, body); }
   deleteMatch(id: string) { return this.del<{ ok: boolean }>(`/matches/${id}`); }
   rsvp(id: string, status: RsvpStatus) { return this.post<MatchWithPlayers>(`/matches/${id}/rsvp`, { status }); }
@@ -85,6 +85,8 @@ export class Api {
   setAdjustment(playerId: string, value: number, reason: AdjustmentReason | null) {
     return this.put<MemberView>(`/organizer/players/${playerId}/adjustment`, { value, reason });
   }
+  favorites() { return this.get<string[]>('/organizer/favorites'); }
+  setFavorite(playerId: string, favorite: boolean) { return this.put<string[]>(`/organizer/players/${playerId}/favorite`, { favorite }); }
   removeMember(playerId: string) { return this.del<{ ok: boolean }>(`/organizer/players/${playerId}`); }
   resolveDispute(matchId: string, playerId: string, decision: 'accept' | 'reject') {
     return this.post<{ ok: boolean }>('/organizer/disputes', { matchId, playerId, decision });

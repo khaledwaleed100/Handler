@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../../environments/environment';
 
-export type PollType = 'weekly' | 'monthly';
+export type PollType = 'weekly' | 'monthly' | 'team';
 
 export interface PollCandidate {
   _id: string;
@@ -27,10 +27,16 @@ export interface Poll {
   createdAt: string;
   closedAt: string | null;
   canManage: boolean;
+  /** How many players one voter picks: 1, or 5 for Team of the Week. */
+  picks: number;
   hasVoted: boolean;
   myVote: string | null;
+  myVotes: string[];
+  /** Number of people who voted. */
   totalVotes: number;
   winnerId: string | null;
+  /** Crowned players, best first (five for Team of the Week). */
+  winnerIds: string[];
   candidates: PollCandidate[];
 }
 
@@ -156,13 +162,13 @@ export class PollService {
   };
 
   // ── Writes ──────────────────────────────────────────────────────────────
-  async vote(pollId: string, playerId: string): Promise<void> {
+  async vote(pollId: string, playerIds: string[]): Promise<void> {
     const before = this.polls();
     this.pendingVoteIds.add(pollId);
-    this.polls.set(before.map(p => (p._id === pollId ? this.withVote(p, playerId) : p)));
+    this.polls.set(before.map(p => (p._id === pollId ? this.withVote(p, playerIds) : p)));
 
     try {
-      const confirmed = await firstValueFrom(this.http.post<Poll>(`${this.api}/${pollId}/vote`, { playerId }));
+      const confirmed = await firstValueFrom(this.http.post<Poll>(`${this.api}/${pollId}/vote`, { playerIds }));
       this.replace(confirmed);
     } catch (err) {
       this.pendingVoteIds.delete(pollId);
@@ -192,15 +198,16 @@ export class PollService {
     this.polls.update(list => list.map(p => (p._id === poll._id ? poll : p)));
   }
 
-  private withVote(poll: Poll, playerId: string): Poll {
+  private withVote(poll: Poll, playerIds: string[]): Poll {
     const total = poll.totalVotes + 1;
     return {
       ...poll,
       hasVoted: true,
-      myVote: playerId,
+      myVote: playerIds[0] ?? null,
+      myVotes: playerIds,
       totalVotes: total,
       candidates: poll.candidates.map(c => {
-        const votes = c._id === playerId ? c.votes + 1 : c.votes;
+        const votes = playerIds.includes(c._id) ? c.votes + 1 : c.votes;
         return { ...c, votes, percent: Math.round((votes / total) * 100) };
       })
     };

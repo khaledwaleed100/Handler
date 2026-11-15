@@ -32,6 +32,8 @@ export class OrganizerPage implements OnInit {
   busy = signal(false);
 
   inviteLink = computed(() => (this.data() ? `${location.origin}/join/${this.data()!.settings.inviteCode}` : ''));
+  /** Starred players first; the name order from the server is kept inside each group. */
+  members = computed(() => [...(this.data()?.members ?? [])].sort((a, b) => Number(!!b.favorite) - Number(!!a.favorite)));
   memberName = (id: string) => this.data()?.members.find(m => m._id === id)?.name ?? this.i18n.t('card.formerPlayer');
   wa = whatsappLink;
 
@@ -89,7 +91,8 @@ export class OrganizerPage implements OnInit {
         groupName: this.settings.groupName,
         lateGraceMinutes: Number(this.settings.lateGraceMinutes),
         defaultCapacity: Number(this.settings.defaultCapacity),
-        ratingWindowHours: Number(this.settings.ratingWindowHours)
+        ratingWindowHours: Number(this.settings.ratingWindowHours),
+        autoReminders: this.settings.autoReminders !== false
       });
       this.data.update(d => (d ? { ...d, settings: s } : d));
       this.ui.toast(this.i18n.t('app.saved'));
@@ -117,9 +120,17 @@ export class OrganizerPage implements OnInit {
     this.busy.set(true);
     try {
       const updated = await this.api.setAdjustment(m._id, this.adjValue(), this.adjValue() === 0 ? null : this.adjReason());
-      this.data.update(d => (d ? { ...d, members: d.members.map(x => (x._id === m._id ? { ...updated, usage: x.usage } : x)) } : d));
+      this.data.update(d => (d ? { ...d, members: d.members.map(x => (x._id === m._id ? { ...updated, usage: x.usage, favorite: x.favorite } : x)) } : d));
       this.ui.toast(this.i18n.t('app.saved'));
     } catch (err) { this.ui.error(err); } finally { this.busy.set(false); }
+  }
+
+  async toggleFavorite(m: MemberView) {
+    const favorite = !m.favorite;
+    this.ui.haptic();
+    const apply = (value: boolean) => this.data.update(d => (d ? { ...d, members: d.members.map(x => (x._id === m._id ? { ...x, favorite: value } : x)) } : d));
+    apply(favorite);
+    try { await this.api.setFavorite(m._id, favorite); } catch (err) { apply(!favorite); this.ui.error(err); }
   }
 
   async remove(m: MemberView) {

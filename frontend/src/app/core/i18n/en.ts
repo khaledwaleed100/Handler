@@ -31,10 +31,10 @@ export const en = {
   },
 
   match: {
-    notifyTitle: 'Notify the group', notifyAsk: 'Ask who\'s in', notifyAskHint: 'Everyone who hasn\'t answered yet', notifySoon: 'Kick-off soon', notifySoonHint: 'Confirmed players', notifyMessage: 'Send a message', notifyMessageHint: 'Everyone in the match', notifyPlaceholder: 'Your message…', notifySend: 'Send', notifySent: 'Sent to {n} people', notifyLast: 'Last sent {t} ago', notifyHow: 'Arrives as a phone notification and an email.', notifyWhatsapp: 'Post in the WhatsApp group', seen: 'Seen', notSeen: 'Not seen', noReplyTitle: 'Not answered yet',
+    notifyTitle: 'Notify the group', notifyAsk: 'Ask who\'s in', notifyAskHint: 'Everyone who hasn\'t answered yet', notifySoon: 'Kick-off soon', notifySoonHint: 'Confirmed players', notifyMessage: 'Send a message', notifyMessageHint: 'Everyone in the match', notifyDetails: 'Email the details', notifyDetailsHint: 'Everyone in the match gets the place, time, map and teams', quickAdd: 'Favourites · tap to add as "in"', notifyPlaceholder: 'Your message…', notifySend: 'Send', notifySent: 'Sent to {n} people', notifyLast: 'Last sent {t} ago', notifyHow: 'Arrives as a phone notification and an email.', notifyWhatsapp: 'Post in the WhatsApp group', seen: 'Seen', notSeen: 'Not seen', noReplyTitle: 'Not answered yet',
     upcoming: 'Upcoming', past: 'Past', newMatch: 'New match', place: 'Place', mapLink: 'Map link', date: 'Date', time: 'Kick-off', capacity: 'Players', price: 'Price per player',
     create: 'Create match', creating: 'Creating…', created: 'Match created. Everyone has been notified.', none: 'No matches here yet', cancelled: 'Cancelled', completed: 'Full time',
-    addToCalendar: 'Add to calendar', directions: 'Directions', shareInvite: 'Share on WhatsApp', confirmed: 'Confirmed', waitlist: 'Waitlist', maybe: 'Maybe', out: 'Out', noReply: 'No reply yet',
+    repeatWeekly: 'Repeat every week', repeatHint: 'Next week\'s match is created by itself at kick-off: same place, day and time.', repeats: 'Weekly', addToCalendar: 'Add to calendar', directions: 'Directions', shareInvite: 'Share on WhatsApp', confirmed: 'Confirmed', waitlist: 'Waitlist', maybe: 'Maybe', out: 'Out', noReply: 'No reply yet',
     tabPlayers: 'Players', tabTeams: 'Teams', tabCheckin: 'Check-in', tabResult: 'Result', tabMoney: 'Money',
     setStatus: 'Set reply for a player', addPlayer: 'Add a player', remove: 'Remove',
     makeTeams: 'Make teams', remake: 'Suggest again', option: 'Option {n}', balance: 'Balance {n}%', prefs: '{met}/{total} wishes met', noPrefs: 'No wishes',
@@ -83,14 +83,14 @@ export const en = {
     adjust: 'Rating adjustment', adjustHint: 'Small correction, up to 5 points either way. Fades over 5 matches. The player sees the number, not your reason.',
     reason: 'Reason', reasons: { injury_return: 'Coming back from injury', new_player: 'New, ratings haven\'t caught up yet', plays_differently: 'Plays differently than ratings show' },
     history: 'History', removeMember: 'Remove from group', removeConfirm: 'Remove {name}? Their account and ratings are deleted.', call: 'Call', whatsapp: 'WhatsApp', noPhone: 'No phone shared',
-    feedback: 'Feedback', noFeedback: 'No feedback yet'
+    feedback: 'Feedback', noFeedback: 'No feedback yet', autoReminders: 'Automatic reminders', autoRemindersHint: 'Everyone gets a reminder the day before; confirmed players get one about 2 hours before kick-off.', addFavorite: 'Add to favourites', removeFavorite: 'Remove from favourites'
   },
 
   poll: {
-    title: 'Vote', subtitle: 'Pick the standout player. One vote each.', live: 'Live', closed: 'Closed', weekly: 'Player of the Week', monthly: 'Player of the Month',
+    title: 'Vote', subtitle: 'Vote for the standout players. One go per poll.', live: 'Live', closed: 'Closed', weekly: 'Player of the Week', monthly: 'Player of the Month', team: 'Team of the Week',
     votes: '{n} votes', tapThenConfirm: 'Tap a player, then confirm', yourPick: 'Your pick', confirmVote: 'Confirm vote', voted: 'Your vote is in. Results update live.',
     you: 'You', winner: 'Winner', rating: 'rating', none: 'No vote open right now', noneHint: 'You\'ll get a notification when one opens.',
-    start: 'Start {type}', startEarly: 'Start early', progress: '{done}/{need} matches', endPoll: 'End poll & crown winner', keepOpen: 'Keep open', yesEnd: 'Yes, end it', waking: 'Waking the server up… this can take up to a minute.'
+    start: 'Start {type}', startEarly: 'Start early', progress: '{done}/{need} matches', pickUpTo: 'Tap up to {n} players, then confirm', pickedCount: '{n} of {max} picked', congrats: 'Congratulations, {name}!', congratsSub: 'Voted {title} by your teammates', shareCard: 'Share the card', congratsText: '🏆 {name} is our {title}! Congratulations 👏', teamText: '⭐ Our {title}: {names}. Congratulations 👏', endPoll: 'End poll & crown winner', keepOpen: 'Keep open', yesEnd: 'Yes, end it', waking: 'Waking the server up… this can take up to a minute.'
   },
 
   time: { now: 'now', min: '{n}m', hour: '{n}h', day: '{n}d' },

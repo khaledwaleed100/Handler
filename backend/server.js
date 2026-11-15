@@ -11,6 +11,7 @@ import { apiLimiter } from './middlewares/rateLimiter.js';
 import { sanitizeBody } from './middlewares/sanitize.js';
 import { notFound, errorHandler } from './middlewares/errorMiddleware.js';
 import apiRoutes from './routes/index.js';
+import { runDueJobs } from './services/schedulerService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isProd = process.env.NODE_ENV === 'production';
@@ -79,7 +80,11 @@ app.use(express.json({ limit: '100kb' }));
 app.use(cookieParser());
 app.use(sanitizeBody);
 
-app.get('/health', (req, res) => res.json({ status: 'ok', uptime: Math.round(process.uptime()) }));
+// Also the heartbeat for reminders and weekly matches: an uptime monitor hitting this keeps them on time.
+app.get('/health', (req, res) => {
+    runDueJobs();
+    res.json({ status: 'ok', uptime: Math.round(process.uptime()) });
+});
 
 app.use('/api', apiLimiter);
 app.use('/api', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
@@ -106,6 +111,9 @@ app.use(errorHandler);
 const server = app.listen(PORT, () => {
     console.log(`Server running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
 });
+
+// While the server is awake, check for due reminders and weekly matches every 5 minutes.
+setInterval(() => runDueJobs(), 5 * 60 * 1000).unref();
 
 process.on('unhandledRejection', (err) => {
     console.error('UNHANDLED REJECTION, shutting down', err);

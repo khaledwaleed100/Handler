@@ -51,6 +51,7 @@ import { IconComponent } from '../../shared/ui/icon.component';
                       @if (m.myPlace === 'confirmed') { <span class="chip chip-primary">{{ 'home.youreIn' | t }}</span> }
                       @if (m.myPlace === 'waitlist') { <span class="chip chip-warn">{{ 'match.waitlist' | t }}</span> }
                       @if (m.teamsPublished) { <span class="chip">👕</span> }
+                      @if (m.repeatWeekly) { <span class="chip">🔁 {{ 'match.repeats' | t }}</span> }
                     }
                     @case ('cancelled') { <span class="chip chip-danger">{{ 'match.cancelled' | t }}</span> }
                     @case ('completed') {
@@ -91,6 +92,10 @@ import { IconComponent } from '../../shared/ui/icon.component';
           </div>
           <label class="field"><span>{{ 'match.mapLink' | t }} <span class="muted">({{ 'app.optional' | t }})</span></span>
             <input class="input" type="url" name="mapUrl" [(ngModel)]="form.mapUrl" placeholder="https://maps.google.com/…" dir="ltr" /></label>
+          <label class="mb-4 flex items-start gap-3">
+            <input type="checkbox" name="repeatWeekly" [(ngModel)]="form.repeatWeekly" class="mt-0.5 h-5 w-5 shrink-0 accent-emerald-500" />
+            <span><span class="block text-sm font-semibold">🔁 {{ 'match.repeatWeekly' | t }}</span><span class="hint !mt-0.5 block">{{ 'match.repeatHint' | t }}</span></span>
+          </label>
           <div class="mt-2 grid grid-cols-2 gap-2">
             <button type="button" class="btn btn-ghost" (click)="creating.set(false)">{{ 'app.cancel' | t }}</button>
             <button class="btn btn-primary" [disabled]="busy() || !form.place || !form.date || !form.time">{{ (busy() ? 'match.creating' : 'match.create') | t }}</button>
@@ -116,7 +121,7 @@ export class MatchesPage implements OnInit {
   busy = signal(false);
   recentPlaces = signal<string[]>([]);
   readonly today = todayInput();
-  form = { place: '', date: todayInput(), time: '20:00', capacity: 10, mapUrl: '' };
+  form = { place: '', date: todayInput(), time: '20:00', capacity: 10, mapUrl: '', repeatWeekly: false };
 
   ngOnInit() {
     this.load();
@@ -162,7 +167,8 @@ export class MatchesPage implements OnInit {
         place: this.form.place.trim(),
         mapUrl: this.form.mapUrl.trim() || undefined,
         kickoff: toIso(this.form.date, this.form.time),
-        capacity: Number(this.form.capacity)
+        capacity: Number(this.form.capacity),
+        repeatWeekly: this.form.repeatWeekly
       });
       this.creating.set(false);
       this.ui.toast(this.i18n.t('match.created'));

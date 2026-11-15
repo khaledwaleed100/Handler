@@ -11,6 +11,11 @@ import { notifyPlayers } from './pushService.js';
 
 const LATE_DROP_WINDOW_MS = 24 * 60 * 60 * 1000;
 
+/** "Tue 17 Nov, 20:00" in the group's time zone, for notifications and emails. */
+export const formatKickoff = (d) => new Date(d).toLocaleString('en-GB', {
+    weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: process.env.TZ_DISPLAY || 'Africa/Cairo'
+});
+
 /**
  * Who is confirmed, waiting, maybe or out. "In" replies beyond capacity go
  * on the waitlist in the order they replied.

@@ -10,7 +10,9 @@ const settingsSchema = new mongoose.Schema({
     inviteCode: { type: String, default: newInviteCode },
     lateGraceMinutes: { type: Number, min: 0, max: 30, default: 5 },
     defaultCapacity: { type: Number, min: 2, max: 22, default: 10 },
-    ratingWindowHours: { type: Number, min: 12, max: 168, default: 72 }
+    ratingWindowHours: { type: Number, min: 12, max: 168, default: 72 },
+    // Day-before and 2-hours-before match reminders, sent without the organizer doing anything.
+    autoReminders: { type: Boolean, default: true }
 }, { timestamps: true });
 
 const Settings = mongoose.model('Settings', settingsSchema);

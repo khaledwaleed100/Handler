@@ -33,10 +33,10 @@ export const ar: Dict = {
   },
 
   match: {
-    notifyTitle: 'أرسل تنبيهاً للمجموعة', notifyAsk: 'اسأل مين جاي', notifyAskHint: 'كل من لم يرد بعد', notifySoon: 'الماتش قرب', notifySoonHint: 'اللاعبين المؤكدين', notifyMessage: 'أرسل رسالة', notifyMessageHint: 'كل من في الماتش', notifyPlaceholder: 'رسالتك…', notifySend: 'إرسال', notifySent: 'تم الإرسال إلى {n} أشخاص', notifyLast: 'آخر إرسال منذ {t}', notifyHow: 'يصل كإشعار على الهاتف وكبريد إلكتروني.', notifyWhatsapp: 'انشر في جروب الواتساب', seen: 'شاف', notSeen: 'لم يشاهد', noReplyTitle: 'لم يرد بعد',
+    notifyTitle: 'أرسل تنبيهاً للمجموعة', notifyAsk: 'اسأل مين جاي', notifyAskHint: 'كل من لم يرد بعد', notifySoon: 'الماتش قرب', notifySoonHint: 'اللاعبين المؤكدين', notifyMessage: 'أرسل رسالة', notifyMessageHint: 'كل من في الماتش', notifyDetails: 'أرسل التفاصيل بالبريد', notifyDetailsHint: 'كل من في الماتش يصله المكان والموعد والخريطة والفرق', quickAdd: 'المفضلون · اضغط للإضافة كـ "جاي"', notifyPlaceholder: 'رسالتك…', notifySend: 'إرسال', notifySent: 'تم الإرسال إلى {n} أشخاص', notifyLast: 'آخر إرسال منذ {t}', notifyHow: 'يصل كإشعار على الهاتف وكبريد إلكتروني.', notifyWhatsapp: 'انشر في جروب الواتساب', seen: 'شاف', notSeen: 'لم يشاهد', noReplyTitle: 'لم يرد بعد',
     upcoming: 'القادمة', past: 'السابقة', newMatch: 'ماتش جديد', place: 'المكان', mapLink: 'رابط الخريطة', date: 'التاريخ', time: 'موعد البداية', capacity: 'عدد اللاعبين', price: 'السعر للفرد',
     create: 'إنشاء الماتش', creating: 'جارٍ الإنشاء…', created: 'تم إنشاء الماتش وإبلاغ الجميع.', none: 'لا توجد ماتشات هنا بعد', cancelled: 'ملغي', completed: 'انتهى',
-    addToCalendar: 'أضف للتقويم', directions: 'الاتجاهات', shareInvite: 'شارك على واتساب', confirmed: 'مؤكد', waitlist: 'الانتظار', maybe: 'يمكن', out: 'معتذر', noReply: 'لم يرد بعد',
+    repeatWeekly: 'كرّر كل أسبوع', repeatHint: 'ماتش الأسبوع القادم يُنشأ تلقائياً عند بداية الماتش: نفس المكان واليوم والموعد.', repeats: 'أسبوعي', addToCalendar: 'أضف للتقويم', directions: 'الاتجاهات', shareInvite: 'شارك على واتساب', confirmed: 'مؤكد', waitlist: 'الانتظار', maybe: 'يمكن', out: 'معتذر', noReply: 'لم يرد بعد',
     tabPlayers: 'اللاعبين', tabTeams: 'الفرق', tabCheckin: 'الحضور', tabResult: 'النتيجة', tabMoney: 'الفلوس',
     setStatus: 'حدد رد لاعب', addPlayer: 'أضف لاعباً', remove: 'إزالة',
     makeTeams: 'قسّم الفرق', remake: 'اقترح من جديد', option: 'اقتراح {n}', balance: 'التوازن {n}%', prefs: 'تحقق {met} من {total} رغبات', noPrefs: 'لا توجد رغبات',
@@ -85,14 +85,14 @@ export const ar: Dict = {
     adjust: 'تعديل التقييم', adjustHint: 'تصحيح بسيط حتى 5 نقاط بالزيادة أو النقص. يتلاشى خلال 5 ماتشات. اللاعب يرى الرقم فقط وليس السبب.',
     reason: 'السبب', reasons: { injury_return: 'عائد من إصابة', new_player: 'جديد ولم تلحق به التقييمات', plays_differently: 'مستواه مختلف عما تظهره التقييمات' },
     history: 'السجل', removeMember: 'أزله من المجموعة', removeConfirm: 'إزالة {name}؟ سيتم حذف حسابه وتقييماته.', call: 'اتصال', whatsapp: 'واتساب', noPhone: 'لم يشارك رقمه',
-    feedback: 'الملاحظات', noFeedback: 'لا توجد ملاحظات'
+    feedback: 'الملاحظات', noFeedback: 'لا توجد ملاحظات', autoReminders: 'تذكيرات تلقائية', autoRemindersHint: 'يصل تذكير للجميع قبل الماتش بيوم، وللاعبين المؤكدين قبل البداية بحوالي ساعتين.', addFavorite: 'أضف للمفضلين', removeFavorite: 'أزل من المفضلين'
   },
 
   poll: {
-    title: 'التصويت', subtitle: 'اختر أفضل لاعب. صوت واحد لكل شخص.', live: 'مباشر', closed: 'مغلق', weekly: 'لاعب الأسبوع', monthly: 'لاعب الشهر',
+    title: 'التصويت', subtitle: 'صوّت لأفضل اللاعبين. مرة واحدة في كل تصويت.', live: 'مباشر', closed: 'مغلق', weekly: 'لاعب الأسبوع', monthly: 'لاعب الشهر', team: 'فريق الأسبوع',
     votes: '{n} أصوات', tapThenConfirm: 'اضغط على لاعب ثم أكّد', yourPick: 'اختيارك', confirmVote: 'أكّد صوتك', voted: 'تم تسجيل صوتك. النتائج تتحدث مباشرة.',
     you: 'أنت', winner: 'الفائز', rating: 'تقييم', none: 'لا يوجد تصويت مفتوح الآن', noneHint: 'سيصلك إشعار عند فتح تصويت.',
-    start: 'ابدأ {type}', startEarly: 'ابدأ مبكراً', progress: '{done}/{need} ماتشات', endPoll: 'أنهِ التصويت وتوّج الفائز', keepOpen: 'اتركه مفتوحاً', yesEnd: 'نعم، أنهِه', waking: 'جارٍ تشغيل السيرفر… قد يستغرق دقيقة.'
+    start: 'ابدأ {type}', startEarly: 'ابدأ مبكراً', progress: '{done}/{need} ماتشات', pickUpTo: 'اختر حتى {n} لاعبين ثم أكّد', pickedCount: 'اخترت {n} من {max}', congrats: 'مبروك يا {name}!', congratsSub: 'اختارك زملاؤك {title}', shareCard: 'شارك البطاقة', congratsText: '🏆 {name} هو {title}! ألف مبروك 👏', teamText: '⭐ {title}: {names}. ألف مبروك 👏', endPoll: 'أنهِ التصويت وتوّج الفائز', keepOpen: 'اتركه مفتوحاً', yesEnd: 'نعم، أنهِه', waking: 'جارٍ تشغيل السيرفر… قد يستغرق دقيقة.'
   },
 
   time: { now: 'الآن', min: '{n} د', hour: '{n} س', day: '{n} يوم' },

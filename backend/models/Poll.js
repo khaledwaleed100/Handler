@@ -19,13 +19,15 @@ const candidateStatSchema = new mongoose.Schema({
 const pollSchema = new mongoose.Schema({
     createdBy: { type: ObjectId, ref: 'User', required: true },
     title: { type: String, required: true },
-    type: { type: String, enum: ['weekly', 'monthly'], required: true },
+    type: { type: String, enum: ['weekly', 'monthly', 'team'], required: true },
     candidates: [{ type: ObjectId, ref: 'Player' }],
     candidateStats: [candidateStatSchema],
     votes: [voteSchema],
     isActive: { type: Boolean, default: true },
     closedAt: { type: Date, default: null },
     winner: { type: ObjectId, ref: 'Player', default: null },
+    // Everyone crowned, best first: one player for Player of the Week/Month, five for Team of the Week.
+    winners: [{ type: ObjectId, ref: 'Player' }],
     matchesIncluded: [{ type: ObjectId, ref: 'Match' }]
 }, { timestamps: true });
 

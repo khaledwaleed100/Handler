@@ -79,6 +79,8 @@ router.get('/organizer/overview', organizerOnly, org.overview);
 router.put('/organizer/settings', organizerOnly, org.updateSettings);
 router.post('/organizer/invite/reset', organizerOnly, org.resetInvite);
 router.put('/organizer/players/:id/adjustment', organizerOnly, org.setAdjustment);
+router.get('/organizer/favorites', organizerOnly, org.getFavorites);
+router.put('/organizer/players/:id/favorite', organizerOnly, org.setFavorite);
 router.delete('/organizer/players/:id', organizerOnly, org.removeMember);
 router.post('/organizer/disputes', organizerOnly, org.resolveDispute);
 

@@ -40,6 +40,9 @@ const userSchema = new mongoose.Schema({
         emailNotifications: { type: Boolean, default: true }
     },
 
+    // Organizer's starred players (regulars), shown first when building a match.
+    favoritePlayers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Player' }],
+
     // Last time this person used the app (for the organizer's usage stats).
     lastActiveAt: { type: Date, default: null },
 

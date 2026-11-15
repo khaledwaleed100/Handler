@@ -2,9 +2,9 @@ import Poll from '../models/Poll.js';
 import { httpError } from '../utils/httpError.js';
 import { isId } from '../utils/validate.js';
 import { isOrganizer } from '../middlewares/authMiddleware.js';
-import { notifyEveryone } from '../services/pushService.js';
+import { notifyEveryone, notifyPlayers } from '../services/pushService.js';
 import {
-    POLL_CONFIG, isValidPollType, getPendingMatches, getPendingMatchCount, rankCandidates, pickWinner, serializePoll
+    POLL_CONFIG, isValidPollType, getPendingMatches, getPendingMatchCount, rankCandidates, pickWinners, picksFor, serializePoll
 } from '../services/pollService.js';
 
 const CANDIDATE_FIELDS = 'name position avatarUrl overall';
@@ -54,7 +54,8 @@ export const generatePoll = async (req, res) => {
     }
 
     const ranked = rankCandidates(matches, cfg.candidateLimit);
-    if (ranked.length < 2) throw httpError(400, 'Not enough players to build a poll.');
+    // A vote needs more candidates than places to win.
+    if (ranked.length <= cfg.picks) throw httpError(400, 'Not enough players to build a poll.');
 
     const poll = await Poll.create({
         createdBy: req.user._id,
@@ -65,7 +66,11 @@ export const generatePoll = async (req, res) => {
         matchesIncluded: matches.map(m => m._id)
     });
 
-    notifyEveryone({ title: `${cfg.title} 🏆`, body: 'Voting is open. Pick your favourite.', url: '/vote' }, req.user._id).catch(() => {});
+    notifyEveryone({
+        title: `${cfg.title} 🏆`,
+        body: cfg.picks > 1 ? `Voting is open. Pick your best ${cfg.picks}.` : 'Voting is open. Pick your favourite.',
+        url: '/vote'
+    }, req.user._id).catch(() => {});
     res.status(201).json(await loadSerialized(poll._id, req));
 };
 
@@ -81,22 +86,31 @@ export const getPolls = async (req, res) => {
     res.json(polls.map(p => serializePoll(p, req.user._id, isOrganizer(req))));
 };
 
-// @route POST /api/polls/:id/vote  { playerId }  — one vote per user, enforced atomically
+// @route POST /api/polls/:id/vote  { playerId } or { playerIds: [...] }
+// One ballot per user, enforced atomically. Team of the Week ballots hold up to 5 players.
 export const voteOnPoll = async (req, res) => {
-    const playerId = req.body?.playerId;
-    if (!isId(req.params.id) || !isId(playerId)) throw httpError(400, 'Invalid poll or player');
+    const raw = Array.isArray(req.body?.playerIds) ? req.body.playerIds : [req.body?.playerId];
+    if (!isId(req.params.id) || !raw.length || raw.length > 20 || !raw.every(isId)) throw httpError(400, 'Invalid poll or player');
+    const playerIds = [...new Set(raw.map(String))];
+
+    const poll = await Poll.findById(req.params.id).select('type');
+    if (!poll) throw httpError(404, 'Poll not found');
+    const picks = picksFor(poll.type);
+    if (playerIds.length > picks) {
+        throw httpError(400, picks > 1 ? `Pick up to ${picks} players` : 'Pick one player');
+    }
 
     const updated = await Poll.findOneAndUpdate(
-        { _id: req.params.id, isActive: true, candidates: playerId, 'votes.userId': { $ne: req.user._id } },
-        { $push: { votes: { userId: req.user._id, playerId } } },
+        { _id: req.params.id, isActive: true, candidates: { $all: playerIds }, 'votes.userId': { $ne: req.user._id } },
+        { $push: { votes: { $each: playerIds.map(playerId => ({ userId: req.user._id, playerId })) } } },
         { returnDocument: 'after' }
     );
 
     if (!updated) {
-        const poll = await Poll.findById(req.params.id);
-        if (!poll) throw httpError(404, 'Poll not found');
-        if (!poll.isActive) throw httpError(400, 'This poll is closed');
-        if (poll.votes.some(vote => String(vote.userId) === String(req.user._id))) {
+        const current = await Poll.findById(req.params.id);
+        if (!current) throw httpError(404, 'Poll not found');
+        if (!current.isActive) throw httpError(400, 'This poll is closed');
+        if (current.votes.some(vote => String(vote.userId) === String(req.user._id))) {
             throw httpError(409, 'You have already voted in this poll');
         }
         throw httpError(400, 'That player is not a candidate in this poll');
@@ -113,7 +127,18 @@ export const closePoll = async (req, res) => {
 
     poll.isActive = false;
     poll.closedAt = new Date();
-    poll.winner = pickWinner(poll);
+    const picks = picksFor(poll.type);
+    poll.winners = pickWinners(poll, picks);
+    poll.winner = poll.winners[0] ?? null;
     await poll.save();
+
+    // Congratulate the winners on their phone and by email.
+    if (poll.winners.length) {
+        notifyPlayers(poll.winners.map(String), {
+            title: picks > 1 ? `You're in the ${poll.title} ⭐` : `You're the ${poll.title} 🏆`,
+            body: 'Congratulations! Your teammates voted for you. Tap to see your card.',
+            url: '/vote'
+        }, { email: true }).catch(() => {});
+    }
     res.json(await loadSerialized(poll._id, req));
 };

@@ -106,6 +106,7 @@ const matchSummary = (m, viewer) => {
         mapUrl: m.mapUrl,
         kickoff: m.kickoff,
         capacity: m.capacity,
+        repeatWeekly: !!m.repeatWeekly,
         status: m.status,
         rsvp: lists,
         myRsvp: myRsvp ? myRsvp.status : null,

@@ -60,9 +60,10 @@
     <!-- Members -->
     <h2 class="section-title">{{ 'org.members' | t: { n: d.members.length } }}</h2>
     <div class="card">
-      @for (m of d.members; track m._id) {
+      @for (m of members(); track m._id) {
         <div [class.divider]="!$first">
-          <button class="row-link w-full text-start" (click)="toggle(m)">
+          <div class="flex items-center">
+          <button class="row-link min-w-0 flex-1 text-start" (click)="toggle(m)">
             <app-avatar [url]="m.avatarUrl" [name]="m.name" [size]="2.5" />
             <span class="min-w-0 flex-1">
               <span class="flex items-center gap-1.5">
@@ -77,6 +78,10 @@
             </span>
             <app-icon name="chevron" class="muted transition-transform" [class.rotate-90]="open() === m._id" />
           </button>
+          <button class="me-2 flex h-11 w-11 shrink-0 items-center justify-center text-xl" [ngClass]="m.favorite ? 'text-amber-400' : 'muted'"
+                  (click)="toggleFavorite(m)" [attr.aria-pressed]="!!m.favorite"
+                  [attr.aria-label]="(m.favorite ? 'org.removeFavorite' : 'org.addFavorite') | t">{{ m.favorite ? '★' : '☆' }}</button>
+          </div>
 
           @if (open() === m._id) {
             <div class="px-4 pb-4 rise">
@@ -158,6 +163,10 @@
         <label class="field"><span>{{ 'org.grace' | t }}</span><input class="input num" type="number" name="grace" min="0" max="30" [(ngModel)]="settings.lateGraceMinutes" /></label>
       </div>
       <label class="field"><span>{{ 'org.ratingWindow' | t }}</span><input class="input num" type="number" name="window" min="12" max="168" [(ngModel)]="settings.ratingWindowHours" /></label>
+      <label class="mb-4 flex items-start gap-3">
+        <input type="checkbox" name="autoReminders" [(ngModel)]="settings.autoReminders" class="mt-0.5 h-5 w-5 shrink-0 accent-emerald-500" />
+        <span><span class="block text-sm font-semibold">🔔 {{ 'org.autoReminders' | t }}</span><span class="hint !mt-0.5 block">{{ 'org.autoRemindersHint' | t }}</span></span>
+      </label>
       <button class="btn btn-primary btn-block" [disabled]="busy()">{{ 'app.save' | t }}</button>
     </form>
 

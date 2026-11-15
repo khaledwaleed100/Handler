@@ -8,8 +8,9 @@ import * as v from '../utils/validate.js';
 import { isOrganizer } from '../middlewares/authMiddleware.js';
 import { matchListView, matchView, publicPlayer } from '../services/views.js';
 import {
-    checkIn, completeMatch, finalizeDueMatches, finalizeRatings, playersByIds, recentTeams, rsvpLists, setRsvp
+    checkIn, completeMatch, finalizeDueMatches, finalizeRatings, formatKickoff, playersByIds, recentTeams, rsvpLists, setRsvp
 } from '../services/matchService.js';
+import { runDueJobs } from '../services/schedulerService.js';
 import { balanceTeams, MAX_PLAYERS } from '../services/balancingService.js';
 import { notifyEveryone, notifyPlayers } from '../services/pushService.js';
 import { ATTRIBUTES } from '../models/Player.js';
@@ -28,13 +29,10 @@ const requireUpcoming = (match) => {
     if (match.status !== 'upcoming') throw httpError(400, 'This match is not upcoming');
 };
 
-const formatKickoff = (d) => new Date(d).toLocaleString('en-GB', {
-    weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: process.env.TZ_DISPLAY || 'Africa/Cairo'
-});
-
 // @route GET /api/matches?scope=upcoming|past
 export const listMatches = async (req, res) => {
     await finalizeDueMatches();
+    await runDueJobs();
     const past = req.query.scope === 'past';
     const filter = past ? { status: { $in: ['completed', 'cancelled'] } } : { status: 'upcoming' };
     const matches = await Match.find(filter).sort({ kickoff: past ? -1 : 1 }).limit(past ? 30 : 20);
@@ -61,7 +59,27 @@ const NOTIFY_KINDS = {
     // "Kick-off soon": confirmed players.
     soon: (m, lists) => lists.confirmed,
     // Free message to everyone in the match (confirmed + waitlist).
-    message: (m, lists) => [...lists.confirmed, ...lists.waitlist]
+    message: (m, lists) => [...lists.confirmed, ...lists.waitlist],
+    // Full match details (place, time, map, teams) to everyone in the match.
+    details: (m, lists) => [...lists.confirmed, ...lists.waitlist]
+};
+
+/** The "match details" message: everything a player needs, one fact per line. */
+const detailsText = async (match, lists, note) => {
+    const lines = [
+        `📍 ${match.place}`,
+        `🕒 ${formatKickoff(match.kickoff)}`,
+        `👥 ${lists.confirmed.length}/${match.capacity} confirmed`
+    ];
+    if (match.mapUrl) lines.push(`🗺 ${match.mapUrl}`);
+    if (match.teamsPublished && match.teamA.length && match.teamB.length) {
+        const players = await playersByIds([...match.teamA, ...match.teamB].map(String));
+        const nameOf = new Map(players.map(p => [String(p._id), p.name]));
+        const names = (ids) => ids.map(id => nameOf.get(String(id)) || '?').join(', ');
+        lines.push('', `🔴 Team A: ${names(match.teamA)}`, `🔵 Team B: ${names(match.teamB)}`);
+    }
+    if (note) lines.push('', note);
+    return { title: `⚽ Match details: ${match.place}`, body: lines.join('\n') };
 };
 
 const notifyText = (kind, match, note) => {
@@ -73,7 +91,7 @@ ${note}` : '';
     return { title: `📣 ${match.place} · ${when}`, body: note || 'Message from the organizer.' };
 };
 
-// @route POST /api/matches/:id/notify  (organizer)  { kind: ask|soon|message, note? }
+// @route POST /api/matches/:id/notify  (organizer)  { kind: ask|soon|message|details, note? }
 // Sends phone notifications + emails. Each kind can be sent at most once every 30 minutes.
 export const notifyGroup = async (req, res) => {
     const match = await loadMatch(req.params.id);
@@ -88,10 +106,12 @@ export const notifyGroup = async (req, res) => {
     }
 
     const all = (await Player.find().select('_id').lean()).map(p => String(p._id)).filter(id => id !== String(req.player?._id));
-    const targets = NOTIFY_KINDS[kind](match, rsvpLists(match), all).filter(id => id !== String(req.player?._id));
+    const lists = rsvpLists(match);
+    const targets = NOTIFY_KINDS[kind](match, lists, all).filter(id => id !== String(req.player?._id));
     if (!targets.length) throw httpError(400, 'Nobody to notify for this');
 
-    const reached = await notifyPlayers(targets, { ...notifyText(kind, match, note), url: `/matches/${match._id}` }, { email: true });
+    const text = kind === 'details' ? await detailsText(match, lists, note) : notifyText(kind, match, note);
+    const reached = await notifyPlayers(targets, { ...text, url: `/matches/${match._id}` }, { email: true });
     match.notifications.push({ kind, at: new Date(), recipients: targets.length });
     await match.save();
     res.json({ recipients: targets.length, reached, match: await matchView(match, viewer(req)) });
@@ -106,6 +126,7 @@ const readMatchFields = (b, { partial }) => {
     if (b.kickoff !== undefined || !partial) out.kickoff = v.date(b.kickoff, 'kick-off time');
     const capacity = v.int(b.capacity, { min: 2, max: MAX_PLAYERS, field: 'Players' });
     if (capacity !== undefined) out.capacity = capacity;
+    if (typeof b.repeatWeekly === 'boolean') out.repeatWeekly = b.repeatWeekly;
     return out;
 };
 
@@ -126,7 +147,7 @@ export const createMatch = async (req, res) => {
     res.status(201).json(await matchView(match, viewer(req)));
 };
 
-// @route PUT /api/matches/:id  (organizer)  { place, mapUrl, kickoff, capacity, cancelled }
+// @route PUT /api/matches/:id  (organizer)  { place, mapUrl, kickoff, capacity, repeatWeekly, cancelled }
 export const updateMatch = async (req, res) => {
     const match = await loadMatch(req.params.id);
     const fields = readMatchFields(req.body || {}, { partial: true });

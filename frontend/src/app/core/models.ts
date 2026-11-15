@@ -59,6 +59,8 @@ export interface MemberView extends SelfPlayer {
   concernFlag: boolean;
   adjustmentReason: AdjustmentReason | null;
   adjustmentLog: { value: number; reason?: AdjustmentReason; at: string }[];
+  /** Starred by the organizer (regulars). Only present in the organizer overview. */
+  favorite?: boolean;
 }
 
 export interface User {
@@ -79,7 +81,7 @@ export interface Me {
 }
 
 export type RsvpStatus = 'in' | 'out' | 'maybe';
-export type NotifyKind = 'ask' | 'soon' | 'message';
+export type NotifyKind = 'ask' | 'soon' | 'message' | 'details';
 
 export interface Attendance {
   player: string;
@@ -95,6 +97,8 @@ export interface Match {
   mapUrl: string;
   kickoff: string;
   capacity: number;
+  /** A new match is created automatically each week. */
+  repeatWeekly: boolean;
   status: 'upcoming' | 'completed' | 'cancelled';
   rsvp: { confirmed: string[]; waitlist: string[]; maybe: string[]; out: string[] };
   myRsvp: RsvpStatus | null;
@@ -176,6 +180,7 @@ export interface GroupSettings {
   lateGraceMinutes: number;
   defaultCapacity: number;
   ratingWindowHours: number;
+  autoReminders: boolean;
 }
 
 export interface OrganizerOverview {

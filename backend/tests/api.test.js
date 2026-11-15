@@ -364,6 +364,84 @@ describe('Polls', () => {
         const closed = await request(app).post(`/api/polls/${poll._id}/close`).set(auth('boss'));
         expect(closed.body.winnerId).toBe(candidate);
     });
+
+    it('runs a Team of the Week vote: up to five picks each, the most-voted are crowned', async () => {
+        const created = await request(app).post('/api/polls/generate').set(auth('boss')).send({ type: 'team', force: true });
+        expect(created.status).toBe(201);
+        const poll = created.body;
+        expect(poll.picks).toBe(5);
+        expect(poll.candidates.length).toBeGreaterThan(5);
+        const ids = poll.candidates.map(c => c._id);
+        const vote = (key, playerIds) => request(app).post(`/api/polls/${poll._id}/vote`).set(auth(key)).send({ playerIds });
+
+        expect((await vote('p1', ids.slice(0, 6))).status).toBe(400);
+        expect((await vote('p1', ids.slice(0, 5))).status).toBe(200);
+        expect((await vote('p1', ids.slice(0, 5))).status).toBe(409);
+        const mine = await vote('p2', ids.slice(0, 2));
+        expect(mine.body).toMatchObject({ totalVotes: 2, hasVoted: true, myVotes: ids.slice(0, 2) });
+
+        const closed = await request(app).post(`/api/polls/${poll._id}/close`).set(auth('boss'));
+        expect(closed.body.winnerIds).toHaveLength(5);
+        expect(closed.body.winnerIds.slice(0, 2).sort()).toEqual(ids.slice(0, 2).sort());
+    });
+});
+
+describe('Organizer favourites and match details', () => {
+    it('stars and un-stars a player, for the organizer only', async () => {
+        const id = people.p2.playerId;
+        expect((await request(app).put(`/api/organizer/players/${id}/favorite`).set(auth('p1')).send({ favorite: true })).status).toBe(403);
+        expect((await request(app).put(`/api/organizer/players/${id}/favorite`).set(auth('boss')).send({ favorite: true })).body).toEqual([id]);
+        const overview = (await request(app).get('/api/organizer/overview').set(auth('boss'))).body;
+        expect(overview.members.find(m => m._id === id).favorite).toBe(true);
+        expect((await request(app).put(`/api/organizer/players/${id}/favorite`).set(auth('boss')).send({ favorite: false })).body).toEqual([]);
+        expect((await request(app).get('/api/organizer/favorites').set(auth('boss'))).body).toEqual([]);
+    });
+
+    it('sends the match details to the players who are in', async () => {
+        const kickoff = new Date(Date.now() + 3 * 24 * 3600 * 1000).toISOString();
+        const match = (await request(app).post('/api/matches').set(auth('boss')).send({ place: 'Details Arena', kickoff })).body;
+        expect((await request(app).post(`/api/matches/${match._id}/rsvp`).set(auth('p1')).send({ status: 'in' })).status).toBe(200);
+        const sent = await request(app).post(`/api/matches/${match._id}/notify`).set(auth('boss')).send({ kind: 'details' });
+        expect(sent.status).toBe(200);
+        expect(sent.body.recipients).toBe(1);
+        await request(app).delete(`/api/matches/${match._id}`).set(auth('boss'));
+    });
+});
+
+describe('Weekly repeat and automatic reminders', () => {
+    it('reminds the group the day before, once, and creates next week\'s match at kick-off', async () => {
+        const { default: Match } = await import('../models/Match.js');
+        const { runDueJobs } = await import('../services/schedulerService.js');
+        const hour = 3600 * 1000;
+        const kickoff = new Date(Date.now() + 23 * hour);
+        const created = await request(app).post('/api/matches').set(auth('boss'))
+            .send({ place: 'Weekly Arena', kickoff: kickoff.toISOString(), repeatWeekly: true });
+        expect(created.body.repeatWeekly).toBe(true);
+        const id = created.body._id;
+        await request(app).post(`/api/matches/${id}/rsvp`).set(auth('p1')).send({ status: 'in' });
+
+        // A match created moments ago is not reminded about: "New match" has just gone out.
+        expect((await runDueJobs({ force: true })).reminders).toBe(0);
+        await Match.collection.updateOne({ _id: new mongoose.Types.ObjectId(id) }, { $set: { createdAt: new Date(Date.now() - 5 * hour) } });
+        expect((await runDueJobs({ force: true })).reminders).toBe(1);
+        expect((await runDueJobs({ force: true })).reminders).toBe(0);
+        const seen = (await request(app).get(`/api/matches/${id}`).set(auth('boss'))).body;
+        expect(seen.notifications.map(n => n.kind)).toContain('auto24');
+
+        // Kick-off passes: next week's match appears, exactly once.
+        await Match.updateOne({ _id: id }, { $set: { kickoff: new Date(Date.now() - hour) } });
+        expect((await runDueJobs({ force: true })).spawned).toBe(1);
+        expect((await runDueJobs({ force: true })).spawned).toBe(0);
+        const upcoming = (await request(app).get('/api/matches').set(auth('p1'))).body.matches.filter(m => m.place === 'Weekly Arena');
+        const next = upcoming.find(m => m._id !== id);
+        expect(next).toMatchObject({ repeatWeekly: true, status: 'upcoming' });
+        expect(Math.round((new Date(next.kickoff) - Date.now()) / (24 * hour))).toBe(7);
+
+        // The organizer can stop the series; turning reminders off silences them.
+        expect((await request(app).put(`/api/matches/${next._id}`).set(auth('boss')).send({ repeatWeekly: false })).body.repeatWeekly).toBe(false);
+        expect((await request(app).put('/api/organizer/settings').set(auth('boss')).send({ autoReminders: false })).body.autoReminders).toBe(false);
+        for (const m of upcoming) await request(app).delete(`/api/matches/${m._id}`).set(auth('boss'));
+    });
 });
 
 describe('Usage stats and Google sign-in', () => {

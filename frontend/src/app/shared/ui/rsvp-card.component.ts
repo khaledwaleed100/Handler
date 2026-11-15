@@ -7,7 +7,7 @@ import { I18n, TPipe } from '../../core/i18n/i18n.service';
 import { MatchWithPlayers, RsvpStatus } from '../../core/models';
 import { Ui } from '../../core/ui.service';
 import { Forecast, WeatherService } from '../../core/services/weather.service';
-import { downloadCalendarEvent, mapLink } from '../../core/util';
+import { googleCalendarLink, mapLink } from '../../core/util';
 import { IconComponent } from './icon.component';
 
 /** The "next match" card: when, where, weather, how many are in, and big In / Out / Maybe buttons. */
@@ -70,7 +70,7 @@ import { IconComponent } from './icon.component';
           } @else if (showLink()) {
             <a class="btn btn-sm btn-ghost" [routerLink]="['/matches', m._id]">{{ 'match.tabPlayers' | t }} <app-icon name="chevron" [size]="16" /></a>
           }
-          <button class="btn btn-sm btn-ghost" (click)="calendar()"><app-icon name="calendar" [size]="16" /> {{ 'match.addToCalendar' | t }}</button>
+          <a class="btn btn-sm btn-ghost" [href]="calendarUrl()" target="_blank" rel="noopener"><app-icon name="calendar" [size]="16" /> {{ 'match.addToCalendar' | t }}</a>
         </div>
       </div>
     </div>`
@@ -123,7 +123,5 @@ export class RsvpCardComponent implements OnInit {
     }
   }
 
-  calendar() {
-    downloadCalendarEvent(this.match(), `⚽ The Handler · ${this.match().place}`);
-  }
+  calendarUrl = computed(() => googleCalendarLink(this.match(), `⚽ The Handler · ${this.match().place}`));
 }

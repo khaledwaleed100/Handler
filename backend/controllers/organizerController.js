@@ -11,6 +11,7 @@ import * as v from '../utils/validate.js';
 import { matchView, organizerPlayer } from '../services/views.js';
 import { recomputeStandings } from '../services/standingsService.js';
 import { finalizeDueMatches } from '../services/matchService.js';
+import { runDueJobs } from '../services/schedulerService.js';
 import { markSeen } from './matchController.js';
 import { notifyPlayers } from '../services/pushService.js';
 
@@ -19,7 +20,8 @@ const settingsView = (s) => ({
     inviteCode: s.inviteCode,
     lateGraceMinutes: s.lateGraceMinutes,
     defaultCapacity: s.defaultCapacity,
-    ratingWindowHours: s.ratingWindowHours
+    ratingWindowHours: s.ratingWindowHours,
+    autoReminders: s.autoReminders !== false
 });
 
 // @route GET /api/settings  — group basics every member needs (no invite code)
@@ -59,7 +61,8 @@ const usageStats = async (players, users) => {
             replyRate: avg(recent.map(m => pct(m.rsvps.length, members))),
             seenRate: avg(recent.map(m => pct((m.seenBy || []).length, members))),
             ratingRate: avg(rated.map(m => pct(m.ratingAssignments.filter(a => a.done).length, m.ratingAssignments.length))),
-            pollTurnout: avg(polls.map(p => pct(p.votes.length, members))),
+            // People who voted, not votes cast (Team of the Week gives each person several picks).
+            pollTurnout: avg(polls.map(p => pct(new Set(p.votes.map(x => String(x.userId))).size, members))),
             matchesCounted: recent.length
         },
         repliesByPlayer,
@@ -91,6 +94,7 @@ export const overview = async (req, res) => {
         })));
 
     const { stats, repliesByPlayer, recentCount } = await usageStats(players, users);
+    const favorites = new Set((req.user.favoritePlayers || []).map(String));
 
     res.json({
         settings: settingsView(settings),
@@ -99,6 +103,7 @@ export const overview = async (req, res) => {
             const u = users.get(String(p.user));
             return {
                 ...organizerPlayer(p, u),
+                favorite: favorites.has(String(p._id)),
                 usage: {
                     lastActiveAt: u?.lastActiveAt || null,
                     push: !!u?.pushSubscriptions?.length,
@@ -126,6 +131,7 @@ export const updateSettings = async (req, res) => {
         ratingWindowHours: v.int(b.ratingWindowHours, { min: 12, max: 168, field: 'Rating window' })
     };
     for (const [k, val] of Object.entries(fields)) if (val !== undefined) s[k] = val;
+    if (typeof b.autoReminders === 'boolean') s.autoReminders = b.autoReminders;
     await s.save();
     res.json(settingsView(s));
 };
@@ -156,6 +162,22 @@ export const setAdjustment = async (req, res) => {
 
     const fresh = await Player.findById(player._id);
     res.json(organizerPlayer(fresh, await User.findById(fresh.user)));
+};
+
+// @route GET /api/organizer/favorites  — ids of the organizer's starred players
+export const getFavorites = async (req, res) => {
+    res.json((req.user.favoritePlayers || []).map(String));
+};
+
+// @route PUT /api/organizer/players/:id/favorite  { favorite: true|false }
+export const setFavorite = async (req, res) => {
+    v.requireId(req.params.id, 'player');
+    if (!(await Player.exists({ _id: req.params.id }))) throw httpError(404, 'Player not found');
+    const change = req.body?.favorite === false
+        ? { $pull: { favoritePlayers: req.params.id } }
+        : { $addToSet: { favoritePlayers: req.params.id } };
+    const user = await User.findByIdAndUpdate(req.user._id, change, { returnDocument: 'after' });
+    res.json(user.favoritePlayers.map(String));
 };
 
 // @route POST /api/organizer/disputes  { matchId, playerId, decision: accept|reject }
@@ -195,7 +217,8 @@ export const removeMember = async (req, res) => {
         Preference.deleteOne({ player: player._id }),
         Preference.updateMany({}, { $pull: { with: player._id, avoid: player._id } }),
         Match.updateMany({ status: 'upcoming' }, { $pull: { rsvps: { player: player._id }, teamA: player._id, teamB: player._id } }),
-        Feedback.deleteMany({ userId: player.user })
+        Feedback.deleteMany({ userId: player.user }),
+        User.updateMany({}, { $pull: { favoritePlayers: player._id } })
     ]);
     await player.deleteOne();
     if (user) await user.deleteOne();
@@ -206,6 +229,7 @@ export const removeMember = async (req, res) => {
 // @route GET /api/home  — everything the Home tab needs in one request
 export const home = async (req, res) => {
     await finalizeDueMatches();
+    await runDueJobs();
 
     const me = req.player ? String(req.player._id) : null;
     const viewer = { player: req.player, isOrganizer: req.user.role === 'organizer' };
