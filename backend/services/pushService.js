@@ -46,35 +46,39 @@ export const notifyUsers = async (userIds, message, { email = false } = {}) => {
     const users = await User.find({ _id: { $in: userIds } }).select('+pushSubscriptions');
     const reached = new Set();
 
-    if (email && emailConfigured()) {
-        // One at a time: Gmail dislikes bursts, and a friends' group is small.
-        for (const user of users) {
-            if (user.preferences?.emailNotifications === false) continue;
+    // Phone notifications first, all at once and marked urgent, so they arrive in seconds.
+    // (They used to wait behind the emails, which could take minutes.)
+    if (isConfigured()) {
+        const data = payload(message);
+        await Promise.all(users.flatMap(user => user.pushSubscriptions.map(async sub => {
             try {
-                await sendNotificationEmail(user.email, user.name, message);
-                reached.add(String(user._id));
+                await webpush.sendNotification(sub, data, { TTL: 6 * 3600, urgency: 'high' });
             } catch (err) {
-                console.error('Notification email failed:', err.message);
+                console.error('Push failed:', err.statusCode || err.message);
+                // 404/410: the phone unsubscribed or the app was removed. Forget it.
+                if (err.statusCode === 404 || err.statusCode === 410) {
+                    await User.updateOne({ _id: user._id }, { $pull: { pushSubscriptions: { endpoint: sub.endpoint } } });
+                }
+                return;
             }
-        }
+            reached.add(String(user._id));
+        })));
     }
 
-    if (!isConfigured()) return reached.size;
-    const data = payload(message);
-
-    await Promise.all(users.flatMap(user => user.pushSubscriptions.map(async sub => {
-        try {
-            await webpush.sendNotification(sub, data, { TTL: 6 * 3600 });
-        } catch (err) {
-            console.error('Push failed:', err.statusCode || err.message);
-            // 404/410: the phone unsubscribed or the app was removed. Forget it.
-            if (err.statusCode === 404 || err.statusCode === 410) {
-                await User.updateOne({ _id: user._id }, { $pull: { pushSubscriptions: { endpoint: sub.endpoint } } });
-            }
-            return;
+    if (email && emailConfigured()) {
+        // Then emails, a few at a time.
+        const wanted = users.filter(u => u.preferences?.emailNotifications !== false);
+        for (let i = 0; i < wanted.length; i += 5) {
+            await Promise.all(wanted.slice(i, i + 5).map(async user => {
+                try {
+                    await sendNotificationEmail(user.email, user.name, message);
+                    reached.add(String(user._id));
+                } catch (err) {
+                    console.error('Notification email failed:', err.message);
+                }
+            }));
         }
-        reached.add(String(user._id));
-    })));
+    }
     return reached.size;
 };
 

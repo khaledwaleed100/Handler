@@ -162,11 +162,14 @@ export const getMyAttendance = async (req, res) => {
     }));
 };
 
+/** Shortest feedback or punctuality note: enough to say what happened. */
+const MIN_TEXT = 10;
+
 // @route POST /api/me/attendance/:matchId/dispute  { note }
 export const disputeAttendance = async (req, res) => {
     const player = requirePlayer(req);
     v.requireId(req.params.matchId, 'match');
-    const note = v.str(req.body?.note, { min: 3, max: 300, field: 'Note', required: true });
+    const note = v.str(req.body?.note, { min: MIN_TEXT, max: 300, field: 'Your note', required: true });
 
     const match = await Match.findById(req.params.matchId);
     const entry = match?.attendance.find(a => String(a.player) === String(player._id));
@@ -203,7 +206,7 @@ export const removePushSubscription = async (req, res) => {
 
 // @route POST /api/me/feedback  { message }
 export const sendFeedback = async (req, res) => {
-    const message = v.str(req.body?.message, { min: 3, max: 1000, field: 'Message', required: true });
+    const message = v.str(req.body?.message, { min: MIN_TEXT, max: 1000, field: 'Your message', required: true });
     await Feedback.create({ userId: req.user._id, message });
     res.status(201).json({ ok: true });
 };

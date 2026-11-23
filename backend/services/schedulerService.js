@@ -15,6 +15,7 @@ import User from '../models/User.js';
 import { getSettings } from '../models/Settings.js';
 import { formatKickoff, rsvpLists } from './matchService.js';
 import { notifyEveryone, notifyPlayers, notifyUsers } from './pushService.js';
+import { broadcast } from './eventsService.js';
 
 const MIN = 60 * 1000;
 const HOUR = 60 * MIN;
@@ -142,6 +143,7 @@ export const runDueJobs = async ({ force = false } = {}) => {
     running = (async () => {
         try {
             const spawned = await spawnRecurringMatches();
+            if (spawned) broadcast('matches');
             const reminders = await sendDueReminders();
             const results = await sendResultReminders();
             return { spawned, reminders, results };

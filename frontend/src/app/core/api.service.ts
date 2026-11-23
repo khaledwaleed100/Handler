@@ -109,12 +109,14 @@ export class Api {
   setRoster(id: string, playerId: string, status: RsvpStatus | 'remove') { return this.post<MatchWithPlayers>(`/matches/${id}/roster`, { playerId, status }); }
   suggestTeams(id: string) { return this.post<{ options: TeamOption[]; players: Record<string, PublicPlayer> }>(`/matches/${id}/teams/suggest`); }
   saveTeams(id: string, teamA: string[], teamB: string[], publish: boolean) { return this.put<MatchWithPlayers>(`/matches/${id}/teams`, { teamA, teamB, publish }); }
-  checkIn(id: string, playerId: string, state: 'arrived' | 'no_show' | 'clear') { return this.post<MatchWithPlayers>(`/matches/${id}/checkin`, { playerId, state }); }
+  checkIn(id: string, playerId: string, state: 'arrived' | 'no_show' | 'clear', minutesLate?: number) {
+    return this.post<MatchWithPlayers>(`/matches/${id}/checkin`, { playerId, state, minutesLate });
+  }
   saveResult(id: string, score: { a: number; b: number }, stats: { player: string; goals: number; assists: number }[]) {
     return this.post<MatchWithPlayers>(`/matches/${id}/result`, { score, stats });
   }
   notify(id: string, kind: NotifyKind, note?: string) {
-    return this.post<{ recipients: number; reached: number; match: MatchWithPlayers }>(`/matches/${id}/notify`, { kind, note });
+    return this.post<{ recipients: number; match: MatchWithPlayers }>(`/matches/${id}/notify`, { kind, note });
   }
   ratingTask(id: string) { return this.get<RatingTask>(`/matches/${id}/rating-task`); }
   submitRatings(id: string, ratings: { ratee: string; scores: Partial<Attributes>; playAgain: boolean }[], mvp: string | null) {
@@ -125,6 +127,7 @@ export class Api {
   // Organizer
   overview() { return this.get<OrganizerOverview>('/organizer/overview'); }
   updateSettings(body: Partial<GroupSettings>) { return this.put<GroupSettings>('/organizer/settings', body); }
+  testEmail() { return this.post<{ ok: boolean; method: string; to: string }>('/organizer/test-email'); }
   resetInvite() { return this.post<GroupSettings>('/organizer/invite/reset'); }
   setAdjustment(playerId: string, value: number, reason: AdjustmentReason | null) {
     return this.put<MemberView>(`/organizer/players/${playerId}/adjustment`, { value, reason });

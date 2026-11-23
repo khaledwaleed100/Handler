@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
 import { NavigationEnd, NavigationStart, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { SwUpdate, VersionReadyEvent } from '@angular/service-worker';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -8,6 +8,8 @@ import { TPipe } from './core/i18n/i18n.service';
 import { PollService } from './core/services/poll.service';
 import { IconComponent } from './shared/ui/icon.component';
 import { OverlaysComponent } from './shared/ui/overlays.component';
+import { LiveService } from './core/services/live.service';
+import { PushService } from './core/services/push.service';
 
 /**
  * App shell: the screen plus one navigation bar, which sits at the bottom on
@@ -47,6 +49,13 @@ export class AppComponent {
   showNav = computed(() => this.auth.isLoggedIn() && !/^\/(login|join|forgot)|\/rate$/.test(this.url()));
 
   constructor() {
+    inject(LiveService); // live updates while signed in
+    // Once the session is confirmed, make sure this phone still gets notifications.
+    const push = inject(PushService);
+    let synced = false;
+    effect(() => {
+      if (this.auth.token() && !synced) { synced = true; push.sync(); }
+    });
     // After a deploy, phones keep running the old version until reloaded.
     // When a new version is downloaded, switch to it on the next screen change,
     // so nobody loses what they were typing.

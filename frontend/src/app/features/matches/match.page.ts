@@ -13,6 +13,7 @@ import { IconComponent } from '../../shared/ui/icon.component';
 import { AvatarComponent } from '../../shared/ui/avatar.component';
 import { SkeletonComponent } from '../../shared/ui/skeleton.component';
 import { CountUpDirective } from '../../shared/ui/count-up.directive';
+import { LiveService } from '../../core/services/live.service';
 
 type Tab = 'players' | 'teams' | 'checkin' | 'result';
 
@@ -107,8 +108,37 @@ export class MatchPage implements OnInit {
     return ['players', 'teams', 'checkin', 'result'];
   });
 
+  constructor() {
+    // Someone replied, the organizer sent a message…: refresh, keeping half-typed results and teams.
+    inject(LiveService).on(['matches'], e => {
+      if (e.id && e.id !== this.id()) return;
+      this.api.match(this.id()).then(m => this.setMatch(m, true)).catch(() => {});
+    });
+  }
+
   async ngOnInit() {
     await this.load();
+  }
+
+  /** More than 3 hours after kick-off, "Arrived" would count the hours since: ask on time / minutes late instead. */
+  afterMatch = computed(() => {
+    const m = this.match();
+    return !!m && (m.status === 'completed' || Date.now() - new Date(m.kickoff).getTime() > 3 * 3600 * 1000);
+  });
+
+  async checkInLate(playerId: string) {
+    const typed = await this.ui.confirm({
+      title: this.i18n.t('match.lateTitle', { name: this.name(playerId) }),
+      confirm: this.i18n.t('app.save'),
+      input: { label: this.i18n.t('match.lateLabel'), type: 'text' }
+    });
+    if (typeof typed !== 'string' || !typed.trim()) return;
+    const minutes = Number(typed.trim());
+    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 180) {
+      this.ui.toast(this.i18n.t('match.lateInvalid'), 'error');
+      return;
+    }
+    this.run(() => this.api.checkIn(this.id(), playerId, 'arrived', minutes));
   }
 
   async load() {
@@ -131,13 +161,15 @@ export class MatchPage implements OnInit {
     }
   }
 
-  private setMatch(m: MatchWithPlayers) {
+  /** live: a background refresh, which must not overwrite a result you're entering. */
+  private setMatch(m: MatchWithPlayers, live = false) {
     this.match.set(m);
     this.api.remember.match(m);
     if (!this.dirty()) {
       this.draftA.set(m.teamA);
       this.draftB.set(m.teamB);
     }
+    if (live) return;
     const g: Record<string, number> = {};
     const a: Record<string, number> = {};
     for (const s of m.stats) { g[s.player] = s.goals; a[s.player] = s.assists; }
@@ -240,9 +272,9 @@ export class MatchPage implements OnInit {
   }
 
   // ── Check-in tab ─────────────────────────────────────
-  checkIn(playerId: string, state: 'arrived' | 'no_show' | 'clear') {
+  checkIn(playerId: string, state: 'arrived' | 'no_show' | 'clear', minutesLate?: number) {
     this.ui.haptic();
-    this.run(() => this.api.checkIn(this.id(), playerId, state));
+    this.run(() => this.api.checkIn(this.id(), playerId, state, minutesLate));
   }
 
   // ── Result tab ───────────────────────────────────────

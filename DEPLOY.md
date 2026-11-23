@@ -41,17 +41,26 @@ Yes, player photos are stored on Cloudinary. The free plan is far more than a gr
 
 Photos are checked to be real JPG, PNG or WebP images under 3 MB, then cropped to 400×400 around the face.
 
-## 4. Email (Gmail app password)
+## 4. Email (Brevo)
 
-1. Turn on **2-Step Verification** for the Gmail account that will send emails.
-2. Go to **Google Account → Security → App passwords**, create one called "The Handler", and copy the 16 letters into `GMAIL_APP_PASSWORD` (no spaces).
+Render's free plan blocks outgoing mail-server (SMTP) connections, so Gmail can't send from there.
+The app sends through **Brevo** instead, over HTTPS. Its free plan allows 300 emails a day.
+
+1. Create a free account at <https://www.brevo.com>.
+2. **Senders, domains & dedicated IPs → Senders → Add a sender**: enter the address emails should come from (your Gmail is fine) and confirm the code Brevo emails you.
+3. **SMTP & API → API keys → Generate a new API key**, name it "The Handler", and copy it.
+4. On Render, set `BREVO_API_KEY` to that key and `EMAIL_FROM` to the sender address from step 2.
+5. Deploy, then in the app open **Organizer → Group settings → Send me a test email**. It shows the real error if something is wrong.
+
+Gmail (`GMAIL_USER` + `GMAIL_APP_PASSWORD`, an app password from Google Account → Security → App passwords) still works when running the app on your own computer or on a paid server. If `BREVO_API_KEY` is set, Brevo is used.
 
 Emails are used for:
 - Password reset codes
-- "You're in" when someone moves up from the waitlist
 - Teams published
 - Match cancelled
+- Day-before match reminders
 - Your "Notify the group" messages
+- Reminders to enter a missing result (organizer)
 
 Players can switch emails off in **Me → App → Emails**.
 

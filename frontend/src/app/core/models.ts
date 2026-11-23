@@ -116,6 +116,8 @@ export interface Match {
   attendance?: Attendance[];
   seen?: string[];
   notifications?: { kind: NotifyKind; at: string; recipients: number }[];
+  /** What the organizer sent about this match, newest first. `recipients` only for the organizer. */
+  messages?: { kind: NotifyKind; at: string; text: string; recipients?: number }[];
 }
 
 export interface MatchWithPlayers extends Match {

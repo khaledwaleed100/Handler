@@ -9,6 +9,7 @@ import { AttendanceRecord, Attributes, OUTFIELD_ATTRIBUTES, POSITIONS, Position,
 import { Ui } from '../../core/ui.service';
 import { ThemeService, Theme } from '../../core/theme.service';
 import { PushService } from '../../core/services/push.service';
+import { LiveService } from '../../core/services/live.service';
 import { PwaService } from '../../core/services/pwa.service';
 import { PlayerCardComponent } from '../../shared/ui/player-card.component';
 import { SelfRatingComponent } from '../../shared/ui/self-rating.component';
@@ -38,6 +39,8 @@ export class MePage implements OnInit {
   squad = signal<PublicPlayer[]>([]);
   disputing = signal<string | null>(null);
   disputeNote = '';
+  /** Shortest feedback or punctuality note the server accepts. */
+  readonly minText = 10;
   busy = signal(false);
   uploading = signal(false);
   pickerFor = signal<'with' | 'avoid' | null>(null);
@@ -70,6 +73,11 @@ export class MePage implements OnInit {
     }));
   });
 
+  constructor() {
+    // The organizer answered a punctuality request, a match finished…
+    inject(LiveService).on(['group', 'matches'], () => this.api.myAttendance().then(a => this.attendance.set(a)).catch(() => {}));
+  }
+
   async ngOnInit() {
     const p = this.player();
     const u = this.auth.user();
@@ -89,7 +97,7 @@ export class MePage implements OnInit {
 
   // ── Punctuality ─────────────────────────────────────
   async sendDispute(matchId: string) {
-    if (this.disputeNote.trim().length < 3) return;
+    if (this.disputeNote.trim().length < this.minText) return;
     this.busy.set(true);
     try {
       await this.api.dispute(matchId, this.disputeNote.trim());
@@ -208,7 +216,7 @@ export class MePage implements OnInit {
   }
 
   async sendFeedback() {
-    if (this.feedbackText.trim().length < 3) return;
+    if (this.feedbackText.trim().length < this.minText) return;
     try {
       await this.api.feedback(this.feedbackText.trim());
       this.feedbackText = '';

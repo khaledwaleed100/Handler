@@ -440,6 +440,35 @@ describe('Organizer favourites and match details', () => {
     });
 });
 
+describe('Messages, check-in after the match, and clear length rules', () => {
+    it('keeps the organizer\'s message on the match for everyone to read', async () => {
+        const kickoff = new Date(Date.now() + 2 * 24 * 3600 * 1000).toISOString();
+        const match = (await request(app).post('/api/matches').set(auth('boss')).send({ place: 'Message Field', kickoff })).body;
+        await request(app).post(`/api/matches/${match._id}/rsvp`).set(auth('p1')).send({ status: 'in' });
+        const sent = await request(app).post(`/api/matches/${match._id}/notify`).set(auth('boss')).send({ kind: 'message', note: 'Bring a white shirt' });
+        expect(sent.status).toBe(200);
+        expect(sent.body.match.messages[0]).toMatchObject({ kind: 'message', text: 'Bring a white shirt', recipients: 1 });
+        const seen = (await request(app).get(`/api/matches/${match._id}`).set(auth('p2'))).body;
+        expect(seen.messages[0].text).toBe('Bring a white shirt');
+        expect(seen.messages[0].recipients).toBeUndefined();
+
+        // Checking someone in long after kick-off needs the minutes, not "now".
+        const { default: Match } = await import('../models/Match.js');
+        await Match.updateOne({ _id: match._id }, { $set: { kickoff: new Date(Date.now() - 2 * 24 * 3600 * 1000) } });
+        const pid = people.p1.playerId;
+        expect((await request(app).post(`/api/matches/${match._id}/checkin`).set(auth('boss')).send({ playerId: pid, state: 'arrived' })).status).toBe(400);
+        const late = await request(app).post(`/api/matches/${match._id}/checkin`).set(auth('boss')).send({ playerId: pid, state: 'arrived', minutesLate: 12 });
+        expect(late.body.attendance[0]).toMatchObject({ state: 'late', minutesLate: 12 });
+        await request(app).delete(`/api/matches/${match._id}`).set(auth('boss'));
+    });
+
+    it('tells people the minimum length instead of a vague error', async () => {
+        const res = await request(app).post('/api/me/feedback').set(auth('p2')).send({ message: 'too short' });
+        expect(res.status).toBe(400);
+        expect(res.body.message).toBe('Your message needs at least 10 characters');
+    });
+});
+
 describe('Kick-off: replies lock and the match becomes history', () => {
     it('closes replies at kick-off, lists it under Past, and asks the organizer for the result', async () => {
         const { default: Match } = await import('../models/Match.js');

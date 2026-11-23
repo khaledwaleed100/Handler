@@ -52,7 +52,7 @@ const matchSchema = new mongoose.Schema({
     // Who opened the match page (for the organizer's "seen / not seen" list).
     seenBy: [{ player: { type: ObjectId, ref: 'Player' }, at: Date, _id: false }],
     // Organizer-sent notifications, newest last (shown so the organizer doesn't double-send).
-    notifications: [{ kind: String, at: Date, recipients: Number, _id: false }],
+    notifications: [{ kind: String, at: Date, recipients: Number, note: { type: String, default: '' }, _id: false }],
 
     // Post-match rating round. Each player rates a few others; who rated whom is never exposed.
     ratingAssignments: [{

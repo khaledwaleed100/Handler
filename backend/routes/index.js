@@ -6,6 +6,7 @@ import * as me from '../controllers/meController.js';
 import * as matches from '../controllers/matchController.js';
 import * as org from '../controllers/organizerController.js';
 import * as polls from '../controllers/pollController.js';
+import { broadcast, subscribe, topicFor } from '../services/eventsService.js';
 
 /**
  * Every API route in one place, so access rules are easy to review:
@@ -30,6 +31,19 @@ router.post('/auth/reset', strictLimiter, auth.resetPassword);
 
 // ── Members ─────────────────────────────────────────────
 router.use(protect);
+
+// After every successful change, tell the open apps which screens to reload.
+router.use((req, res, next) => {
+    const change = topicFor(req.method, req.path);
+    if (change) {
+        res.on('finish', () => {
+            if (res.statusCode < 400) broadcast(change.topic, change.id ? { id: change.id } : {});
+        });
+    }
+    next();
+});
+
+router.get('/events', subscribe);
 
 router.get('/home', org.home);
 router.get('/settings', org.publicSettings);
@@ -77,6 +91,7 @@ router.post('/polls/:id/close', organizerOnly, polls.closePoll);
 
 router.get('/organizer/overview', organizerOnly, org.overview);
 router.put('/organizer/settings', organizerOnly, org.updateSettings);
+router.post('/organizer/test-email', organizerOnly, strictLimiter, org.testEmail);
 router.post('/organizer/invite/reset', organizerOnly, org.resetInvite);
 router.put('/organizer/players/:id/adjustment', organizerOnly, org.setAdjustment);
 router.get('/organizer/favorites', organizerOnly, org.getFavorites);

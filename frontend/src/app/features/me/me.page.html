@@ -52,7 +52,7 @@
             <span class="text-xs muted">{{ i18n.date(r.kickoff, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) }}</span>
           </span>
           <span class="chip" [ngClass]="r.state === 'on_time' || r.dispute.state === 'accepted' ? 'chip-primary' : r.state === 'late' ? 'chip-warn' : 'chip-danger'">
-            @switch (r.state) {
+            @switch (r.dispute.state === 'accepted' ? 'on_time' : r.state) {
               @case ('on_time') { {{ 'match.onTime' | t }} }
               @case ('late') { {{ 'match.late' | t: { n: r.minutesLate } }} }
               @case ('no_show') { {{ 'match.noShow' | t }} }
@@ -64,9 +64,10 @@
             @if (disputing() === r.matchId) {
               <div class="mt-2 w-full">
                 <textarea class="input" rows="2" maxlength="300" [(ngModel)]="disputeNote" [placeholder]="'me.disputeNote' | t"></textarea>
+                @if (disputeNote.trim().length < minText) { <p class="hint">{{ 'app.minChars' | t: { min: minText, n: disputeNote.trim().length } }}</p> }
                 <div class="mt-2 grid grid-cols-2 gap-2">
                   <button class="btn btn-sm btn-ghost" (click)="disputing.set(null)">{{ 'app.cancel' | t }}</button>
-                  <button class="btn btn-sm btn-primary" [disabled]="busy() || disputeNote.trim().length < 3" (click)="sendDispute(r.matchId)">{{ 'me.sendDispute' | t }}</button>
+                  <button class="btn btn-sm btn-primary" [disabled]="busy() || disputeNote.trim().length < minText" (click)="sendDispute(r.matchId)">{{ 'me.sendDispute' | t }}</button>
                 </div>
               </div>
             } @else {
@@ -150,6 +151,7 @@
         <span class="flex-1 font-semibold">{{ 'me.notifications' | t }}</span>
         @switch (push.state()) {
           @case ('unsupported') { <span class="text-xs muted">{{ 'me.notifUnsupported' | t }}</span> }
+          @case ('install') { <span class="max-w-[60%] text-end text-xs muted">{{ 'me.notifIos' | t }}</span> }
           @case ('blocked') { <span class="text-xs muted">{{ 'me.notifBlocked' | t }}</span> }
           @default {
             <button class="btn btn-sm" [ngClass]="push.state() === 'on' ? 'btn-primary' : 'btn-ghost'" (click)="toggleNotifications()">
@@ -185,7 +187,8 @@
         <div class="row-link flex-col !items-stretch">
           <span class="font-semibold">{{ 'me.feedback' | t }}</span>
           <textarea class="input" rows="2" maxlength="1000" [(ngModel)]="feedbackText"></textarea>
-          <button class="btn btn-sm btn-ghost self-end" [disabled]="feedbackText.trim().length < 3" (click)="sendFeedback()">{{ 'app.share' | t }}</button>
+          @if (feedbackText.trim().length < minText) { <p class="hint !mt-0">{{ 'app.minChars' | t: { min: minText, n: feedbackText.trim().length } }}</p> }
+          <button class="btn btn-sm btn-ghost self-end" [disabled]="feedbackText.trim().length < minText" (click)="sendFeedback()">{{ 'app.share' | t }}</button>
         </div>
       }
       <button class="row-link w-full text-start" (click)="auth.logout()"><app-icon name="back" /><span class="flex-1 font-semibold">{{ 'me.logout' | t }}</span></button>

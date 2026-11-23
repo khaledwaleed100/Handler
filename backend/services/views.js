@@ -15,6 +15,9 @@ import User from '../models/User.js';
 import { MIN_RATERS, eloToSkill } from './ratingService.js';
 import { rsvpLists } from './matchService.js';
 
+/** Notifications the organizer sends by hand (automatic reminders aren't shown as messages). */
+const ORGANIZER_SENT = ['ask', 'soon', 'message', 'details'];
+
 const plain = (doc) => (doc?.toObject ? doc.toObject() : doc);
 
 export const badgesFor = (p) => {
@@ -130,7 +133,12 @@ const matchSummary = (m, viewer) => {
         // Organizer-only details.
         attendance: viewer.isOrganizer ? m.attendance : undefined,
         seen: viewer.isOrganizer ? (m.seenBy || []).map(x => String(x.player)) : undefined,
-        notifications: viewer.isOrganizer ? (m.notifications || []).slice(-5) : undefined
+        notifications: viewer.isOrganizer ? (m.notifications || []).slice(-5) : undefined,
+        // What the organizer sent about this match (newest first), visible to everyone.
+        messages: (m.notifications || [])
+            .filter(n => ORGANIZER_SENT.includes(n.kind) && (n.note || n.kind === 'details'))
+            .map(n => ({ kind: n.kind, at: n.at, text: n.note || '', ...(viewer.isOrganizer ? { recipients: n.recipients } : {}) }))
+            .reverse()
     };
 };
 

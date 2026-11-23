@@ -9,6 +9,7 @@ import { assignRatings } from './ratingService.js';
 import { recomputeStandings } from './standingsService.js';
 import { notifyPlayers } from './pushService.js';
 import { httpError } from '../utils/httpError.js';
+import { broadcast } from './eventsService.js';
 
 const LATE_DROP_WINDOW_MS = 24 * 60 * 60 * 1000;
 
@@ -152,6 +153,8 @@ export const finalizeDueMatches = async () => {
     if (!due.length) return 0;
     for (const m of due) await finalizeRatings(m, { recompute: false });
     await recomputeStandings();
+    broadcast('matches');
+    broadcast('players');
     return due.length;
 };
 

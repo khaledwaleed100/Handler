@@ -6,6 +6,7 @@ import { I18n, TPipe } from '../../core/i18n/i18n.service';
 import { Home, MatchWithPlayers } from '../../core/models';
 import { Ui } from '../../core/ui.service';
 import { PollService } from '../../core/services/poll.service';
+import { LiveService } from '../../core/services/live.service';
 import { RsvpCardComponent } from '../../shared/ui/rsvp-card.component';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { AvatarComponent } from '../../shared/ui/avatar.component';
@@ -120,6 +121,10 @@ export class HomePage implements OnInit {
   });
 
   readonly reload = () => Promise.all([this.load(), this.polls.refresh().catch(() => undefined)]);
+
+  constructor() {
+    inject(LiveService).on(['matches', 'polls', 'group', 'players'], () => this.reload());
+  }
 
   ngOnInit() {
     this.load();

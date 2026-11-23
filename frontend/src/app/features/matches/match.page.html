@@ -77,6 +77,23 @@
       </div>
     }
 
+    <!-- ── Messages from the organizer (everyone sees them, the organizer too) ── -->
+    @if (m.messages?.length) {
+      <h2 class="section-title">📣 {{ 'match.messages' | t }}</h2>
+      <div class="card">
+        @for (msg of m.messages; track msg.at) {
+          <div class="card-pad" [class.divider]="!$first">
+            <div class="flex items-center justify-between gap-2 text-xs font-bold muted">
+              <span>{{ ('match.msg_' + msg.kind) | t }}</span>
+              <span>{{ i18n.date(msg.at, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) }}</span>
+            </div>
+            @if (msg.text) { <p class="mt-1 whitespace-pre-line text-sm">{{ msg.text }}</p> }
+            @if (msg.recipients !== undefined) { <p class="hint !mt-1">{{ 'match.notifySent' | t: { n: msg.recipients } }}</p> }
+          </div>
+        }
+      </div>
+    }
+
     <!-- ── My punctuality / payment notes ────────── -->
     @if (m.myAttendance; as a) {
       @if (a.state !== 'on_time') {
@@ -146,6 +163,7 @@
                   @for (n of notifyKinds; track n.kind) {
                     @if (n.kind === k) { <p class="text-xs font-semibold muted">→ {{ n.hint | t }} @if (lastSent(k)) { · {{ lastSent(k) }} }</p> }
                   }
+                  @if (k === 'message' && notifyNote.trim().length < 2) { <p class="hint">{{ 'app.minChars' | t: { min: 2, n: notifyNote.trim().length } }}</p> }
                   <textarea class="input mt-2" rows="2" maxlength="200" [(ngModel)]="notifyNote"
                             [placeholder]="('match.notifyPlaceholder' | t) + (k === 'message' ? '' : ' (' + ('app.optional' | t) + ')')"></textarea>
                   <div class="mt-2 grid grid-cols-2 gap-2">
@@ -239,7 +257,7 @@
 
           <!-- Check-in -->
           @case ('checkin') {
-            <p class="hint mb-3">{{ 'match.checkinHint' | t }}</p>
+            <p class="hint mb-3">{{ (afterMatch() ? 'match.checkinAfterHint' : 'match.checkinHint') | t }}</p>
             <div class="card">
               @for (id of checkinList(); track id) {
                 @let a = attendanceOf(id);
@@ -258,6 +276,10 @@
                   </div>
                   @if (a) {
                     <button class="btn btn-sm btn-ghost" [disabled]="busy()" (click)="checkIn(id, 'clear')">{{ 'match.undo' | t }}</button>
+                  } @else if (afterMatch()) {
+                    <button class="btn btn-sm btn-primary" [disabled]="busy()" (click)="checkIn(id, 'arrived', 0)">{{ 'match.onTimeBtn' | t }}</button>
+                    <button class="btn btn-sm btn-soft" [disabled]="busy()" (click)="checkInLate(id)">{{ 'match.lateBtn' | t }}</button>
+                    <button class="btn btn-sm btn-danger" [disabled]="busy()" (click)="checkIn(id, 'no_show')" [attr.aria-label]="'match.noShow' | t">✗</button>
                   } @else {
                     <button class="btn btn-sm btn-primary" [disabled]="busy()" (click)="checkIn(id, 'arrived')">{{ 'match.arrived' | t }}</button>
                     <button class="btn btn-sm btn-danger" [disabled]="busy()" (click)="checkIn(id, 'no_show')" [attr.aria-label]="'match.noShow' | t">✗</button>

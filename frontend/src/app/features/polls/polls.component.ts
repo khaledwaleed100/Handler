@@ -11,6 +11,7 @@ import { SkeletonComponent } from '../../shared/ui/skeleton.component';
 import { CountUpDirective } from '../../shared/ui/count-up.directive';
 import { PullToRefreshDirective } from '../../shared/ui/pull-to-refresh.directive';
 import { celebrate } from '../../core/celebrate';
+import { LiveService } from '../../core/services/live.service';
 
 /**
  * Player of the Week / Month and Team of the Week voting.
@@ -213,6 +214,7 @@ export class PollsComponent implements OnInit, OnDestroy {
   readonly reload = () => this.polls.refresh();
 
   constructor() {
+    inject(LiveService).on(['polls'], () => this.polls.refresh().catch(() => {}));
     // Confetti the first time this phone sees a poll's winners (bigger if you're one of them).
     effect(() => {
       const fresh = this.polls.polls().filter(p => !p.isActive && p.winnerIds.length && !celebrated().includes(p._id));

@@ -168,6 +168,8 @@
         <span><span class="block text-sm font-semibold">🔔 {{ 'org.autoReminders' | t }}</span><span class="hint !mt-0.5 block">{{ 'org.autoRemindersHint' | t }}</span></span>
       </label>
       <button class="btn btn-primary btn-block" [disabled]="busy()">{{ 'app.save' | t }}</button>
+      <button type="button" class="btn btn-ghost btn-block mt-2" [disabled]="busy()" (click)="testEmail()">✉️ {{ 'org.testEmail' | t }}</button>
+      <p class="hint">{{ 'org.testEmailHint' | t }}</p>
     </form>
 
     <!-- Feedback -->

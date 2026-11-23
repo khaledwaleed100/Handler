@@ -9,6 +9,7 @@ import { Ui } from '../../core/ui.service';
 import { toIso, todayInput } from '../../core/util';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { SavedNoteComponent } from '../../shared/ui/saved-note.component';
+import { LiveService } from '../../core/services/live.service';
 import { SkeletonComponent } from '../../shared/ui/skeleton.component';
 import { PullToRefreshDirective } from '../../shared/ui/pull-to-refresh.directive';
 
@@ -133,6 +134,10 @@ export class MatchesPage implements OnInit {
   form = { place: '', date: todayInput(), time: '20:00', capacity: 10, mapUrl: '', repeatWeekly: false };
 
   readonly reload = () => this.load();
+
+  constructor() {
+    inject(LiveService).on(['matches'], () => this.load());
+  }
 
   ngOnInit() {
     this.load();

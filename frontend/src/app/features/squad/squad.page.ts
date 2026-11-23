@@ -7,6 +7,7 @@ import { POSITIONS, Position, PublicPlayer } from '../../core/models';
 import { Ui } from '../../core/ui.service';
 import { PlayerCardComponent } from '../../shared/ui/player-card.component';
 import { SavedNoteComponent } from '../../shared/ui/saved-note.component';
+import { LiveService } from '../../core/services/live.service';
 import { SkeletonComponent } from '../../shared/ui/skeleton.component';
 import { PullToRefreshDirective } from '../../shared/ui/pull-to-refresh.directive';
 
@@ -74,6 +75,10 @@ export class SquadPage implements OnInit {
   });
 
   readonly reload = () => this.load();
+
+  constructor() {
+    inject(LiveService).on(['players', 'matches', 'group'], () => this.load());
+  }
 
   ngOnInit() {
     this.load();

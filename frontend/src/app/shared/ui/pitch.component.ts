@@ -131,12 +131,9 @@ interface Slot { id: string; side: Side }
           <div class="pcard-name">{{ p ? firstName(p.name) : ('card.formerPlayer' | t) }}</div>
         }
         @if (badgesFor(id); as b) {
-          @if (b.goals || b.assists || b.mvp) {
-            <span class="pcard-badges">
-              @if (b.mvp) { <span>👑</span> }
-              @if (b.goals) { <span>⚽{{ b.goals > 1 ? b.goals : '' }}</span> }
-              @if (b.assists) { <span>👟{{ b.assists > 1 ? b.assists : '' }}</span> }
-            </span>
+          <!-- Only the MVP crown: goal/assist icons were too cramped on the small cards. -->
+          @if (b.mvp) {
+            <span class="pcard-badges"><span>👑</span></span>
           }
         }
       </button>

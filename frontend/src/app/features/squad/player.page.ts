@@ -7,6 +7,7 @@ import { PlayerProfile } from '../../core/models';
 import { Ui } from '../../core/ui.service';
 import { PlayerCardComponent } from '../../shared/ui/player-card.component';
 import { IconComponent } from '../../shared/ui/icon.component';
+import { LiveService } from '../../core/services/live.service';
 import { SkeletonComponent } from '../../shared/ui/skeleton.component';
 
 @Component({
@@ -54,6 +55,10 @@ export class PlayerPage implements OnInit {
   i18n = inject(I18n);
   id = input.required<string>();
   profile = signal<PlayerProfile | null>(null);
+
+  constructor() {
+    inject(LiveService).on(['players', 'matches', 'group'], () => this.api.player(this.id()).then(p => this.profile.set(p)).catch(() => {}));
+  }
 
   async ngOnInit() {
     const saved = this.api.cached.player(this.id());

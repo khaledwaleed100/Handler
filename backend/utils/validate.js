@@ -21,7 +21,8 @@ export const str = (v, { min = 0, max = 200, field = 'value', required = false }
     }
     if (typeof v !== 'string') throw httpError(400, `${field} must be text`);
     const s = v.trim();
-    if (s.length < min || s.length > max) throw httpError(400, `${field} must be ${min}-${max} characters`);
+    if (s.length < min) throw httpError(400, `${field} needs at least ${min} characters`);
+    if (s.length > max) throw httpError(400, `${field} can be at most ${max} characters`);
     return s;
 };
 

@@ -10,6 +10,7 @@ import { whatsappLink } from '../../core/util';
 import { AvatarComponent } from '../../shared/ui/avatar.component';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { SkeletonComponent } from '../../shared/ui/skeleton.component';
+import { LiveService } from '../../core/services/live.service';
 
 const REASONS: AdjustmentReason[] = ['injury_return', 'new_player', 'plays_differently'];
 
@@ -60,11 +61,16 @@ export class OrganizerPage implements OnInit {
     ];
   });
 
+  constructor() {
+    inject(LiveService).on(['matches', 'players', 'group', 'polls'], () => this.load(true));
+  }
+
   async ngOnInit() {
     await this.load();
   }
 
-  async load() {
+  /** keepForm: a live refresh mustn't wipe settings you're typing. */
+  async load(keepForm = false) {
     const saved = this.api.cached.overview();
     if (this.api.showNow(saved)) {
       this.data.set(saved.data);
@@ -73,7 +79,7 @@ export class OrganizerPage implements OnInit {
     try {
       const d = await this.api.overview();
       this.data.set(d);
-      this.settings = { ...d.settings };
+      if (!keepForm) this.settings = { ...d.settings };
     } catch (err) {
       this.ui.error(err);
     }
@@ -102,6 +108,14 @@ export class OrganizerPage implements OnInit {
       });
       this.data.update(d => (d ? { ...d, settings: s } : d));
       this.ui.toast(this.i18n.t('app.saved'));
+    } catch (err) { this.ui.error(err); } finally { this.busy.set(false); }
+  }
+
+  async testEmail() {
+    this.busy.set(true);
+    try {
+      const res = await this.api.testEmail();
+      this.ui.toast(this.i18n.t('org.testEmailSent', { to: res.to }), 'ok', 6000);
     } catch (err) { this.ui.error(err); } finally { this.busy.set(false); }
   }
 

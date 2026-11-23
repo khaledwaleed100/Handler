@@ -32,7 +32,7 @@ const requireUpcoming = (match) => {
 // @route GET /api/matches?scope=upcoming|past
 export const listMatches = async (req, res) => {
     await finalizeDueMatches();
-    await runDueJobs();
+    runDueJobs(); // in the background: reminders and emails must never slow a screen down
     const past = req.query.scope === 'past';
     const now = new Date();
     // A match moves to Past at kick-off, whether or not the result is in yet.
@@ -116,10 +116,13 @@ export const notifyGroup = async (req, res) => {
     if (!targets.length) throw httpError(400, 'Nobody to notify for this');
 
     const text = kind === 'details' ? await detailsText(match, lists, note) : notifyText(kind, match, note);
-    const reached = await notifyPlayers(targets, { ...text, url: `/matches/${match._id}` }, { email: true });
-    match.notifications.push({ kind, at: new Date(), recipients: targets.length });
+    // Kept on the match so everyone (the organizer included) can read it on the match page.
+    match.notifications.push({ kind, at: new Date(), recipients: targets.length, note: note || '' });
     await match.save();
-    res.json({ recipients: targets.length, reached, match: await matchView(match, viewer(req)) });
+    // Sent in the background: the organizer doesn't wait for every phone and email.
+    notifyPlayers(targets, { ...text, url: `/matches/${match._id}` }, { email: true })
+        .catch(err => console.error('Notify failed:', err.message));
+    res.json({ recipients: targets.length, match: await matchView(match, viewer(req)) });
 };
 
 const readMatchFields = (b, { partial }) => {
@@ -264,14 +267,24 @@ export const saveTeams = async (req, res) => {
     res.json(await matchView(match, viewer(req)));
 };
 
-// @route POST /api/matches/:id/checkin  (organizer)  { playerId, state: arrived|no_show|clear, arrivedAt? }
+/** "Arrived" uses the current time only during the match; after that the organizer gives the minutes. */
+const LIVE_CHECKIN_MS = 3 * 3600 * 1000;
+
+// @route POST /api/matches/:id/checkin  (organizer)  { playerId, state: arrived|no_show|clear, arrivedAt?, minutesLate? }
 export const checkInPlayer = async (req, res) => {
     const match = await loadMatch(req.params.id);
     if (match.status === 'cancelled') throw httpError(400, 'Match was cancelled');
     const playerId = v.requireId(req.body?.playerId, 'player');
     const state = req.body?.state;
     if (!['arrived', 'no_show', 'clear'].includes(state)) throw httpError(400, 'Invalid check-in');
-    const arrivedAt = req.body?.arrivedAt ? v.date(req.body.arrivedAt, 'arrival time') : new Date();
+    const minutesLate = v.int(req.body?.minutesLate, { min: 0, max: 180, field: 'Minutes late' });
+    let arrivedAt = req.body?.arrivedAt ? v.date(req.body.arrivedAt, 'arrival time') : new Date();
+    if (minutesLate !== undefined) {
+        arrivedAt = new Date(new Date(match.kickoff).getTime() + minutesLate * 60_000);
+    } else if (state === 'arrived' && !req.body?.arrivedAt && Date.now() - new Date(match.kickoff) > LIVE_CHECKIN_MS) {
+        // Tapping "Arrived" days later would record days of lateness.
+        throw httpError(400, 'The match was a while ago: say whether they were on time or how many minutes late');
+    }
 
     const inMatch = rsvpLists(match).confirmed.includes(playerId) ||
         [...match.teamA, ...match.teamB].some(p => String(p) === playerId);

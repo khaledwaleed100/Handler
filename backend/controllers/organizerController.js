@@ -14,6 +14,7 @@ import { finalizeDueMatches } from '../services/matchService.js';
 import { runDueJobs } from '../services/schedulerService.js';
 import { markSeen } from './matchController.js';
 import { notifyPlayers } from '../services/pushService.js';
+import { emailMethod, sendTestEmail } from '../services/emailService.js';
 
 const settingsView = (s) => ({
     groupName: s.groupName,
@@ -136,6 +137,21 @@ export const updateSettings = async (req, res) => {
     res.json(settingsView(s));
 };
 
+// @route POST /api/organizer/test-email  — sends the organizer a test email and reports the real error
+export const testEmail = async (req, res) => {
+    const method = emailMethod();
+    if (!method) throw httpError(400, 'Email is not set up on the server (no BREVO_API_KEY or Gmail settings)');
+    try {
+        await sendTestEmail(req.user.email, req.user.name);
+    } catch (err) {
+        const blocked = /timeout|ETIMEDOUT|ECONNREFUSED|ENETUNREACH/i.test(err.message) && method === 'gmail';
+        throw httpError(502, blocked
+            ? 'Gmail could not be reached. Render\'s free plan blocks this; set up Brevo (see DEPLOY.md).'
+            : `Sending failed: ${err.message}`);
+    }
+    res.json({ ok: true, method, to: req.user.email });
+};
+
 // @route POST /api/organizer/invite/reset  — old link stops working
 export const resetInvite = async (req, res) => {
     const s = await getSettings();
@@ -229,7 +245,7 @@ export const removeMember = async (req, res) => {
 // @route GET /api/home  — everything the Home tab needs in one request
 export const home = async (req, res) => {
     await finalizeDueMatches();
-    await runDueJobs();
+    runDueJobs(); // in the background: reminders and emails must never slow a screen down
 
     const me = req.player ? String(req.player._id) : null;
     const viewer = { player: req.player, isOrganizer: req.user.role === 'organizer' };
