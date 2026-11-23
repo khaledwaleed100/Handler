@@ -8,6 +8,7 @@ import { getSettings } from '../models/Settings.js';
 import { assignRatings } from './ratingService.js';
 import { recomputeStandings } from './standingsService.js';
 import { notifyPlayers } from './pushService.js';
+import { httpError } from '../utils/httpError.js';
 
 const LATE_DROP_WINDOW_MS = 24 * 60 * 60 * 1000;
 
@@ -31,7 +32,14 @@ export const rsvpLists = (match) => {
 };
 
 /**
- * Sets a player's reply. Records a "late drop-out" when a confirmed player
+ * A match becomes history at the exact kick-off time: from then on replies are closed and
+ * it's listed under Past, even before the organizer enters the result.
+ */
+export const hasKickedOff = (match, now = Date.now()) => new Date(match.kickoff).getTime() <= now;
+
+/**
+ * Sets a player's reply.
+ * A full match takes no more "in" replies (there is no waitlist): someone has to drop out first. Records a "late drop-out" when a confirmed player
  * pulls out within 24 hours of kick-off, and tells whoever moves up from the
  * waitlist that they're in.
  */
@@ -41,6 +49,9 @@ export const setRsvp = async (match, playerId, status) => {
     const wasConfirmed = before.confirmed.includes(id);
 
     const existing = match.rsvps.find(r => String(r.player) === id);
+    if (status === 'in' && existing?.status !== 'in' && before.confirmed.length >= match.capacity) {
+        throw httpError(409, `This match is full (${match.capacity} players are in)`);
+    }
     if (existing) {
         if (existing.status !== status) {
             existing.status = status;

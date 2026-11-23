@@ -102,6 +102,8 @@ export class MatchPage implements OnInit {
     const m = this.match();
     if (!m) return [];
     if (m.status === 'completed') return ['result', 'checkin'];
+    // Played but no result yet: open on Result.
+    if (m.kickedOff) return ['result', 'teams', 'checkin', 'players'];
     return ['players', 'teams', 'checkin', 'result'];
   });
 

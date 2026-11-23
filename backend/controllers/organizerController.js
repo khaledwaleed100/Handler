@@ -234,7 +234,7 @@ export const home = async (req, res) => {
     const me = req.player ? String(req.player._id) : null;
     const viewer = { player: req.player, isOrganizer: req.user.role === 'organizer' };
 
-    const next = await Match.findOne({ status: 'upcoming', kickoff: { $gte: new Date(Date.now() - 3 * 3600 * 1000) } }).sort({ kickoff: 1 });
+    const next = await Match.findOne({ status: 'upcoming', kickoff: { $gt: new Date() } }).sort({ kickoff: 1 });
     if (next) await markSeen(next, req.player); // Home shows the next match, so it counts as seen.
 
     const toRate = me ? await Match.find({

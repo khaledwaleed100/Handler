@@ -26,8 +26,23 @@
     }
 
     <!-- ── Upcoming: reply card ──────────────────── -->
-    @if (m.status === 'upcoming') {
+    @if (m.status === 'upcoming' && !m.kickedOff) {
       <app-rsvp-card [match]="m" [showLink]="false" (changed)="onRsvp($event)" />
+    }
+
+    <!-- ── Kicked off, no result yet: in history, replies locked ── -->
+    @if (m.status === 'upcoming' && m.kickedOff) {
+      <div class="card card-pad text-center">
+        <div class="text-xs font-bold uppercase tracking-wider muted">{{ i18n.date(m.kickoff, { weekday: 'long', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) }}</div>
+        <p class="mt-1 font-bold">🔒 {{ 'match.kickedOff' | t }}</p>
+        <p class="mt-1 text-sm muted">{{ 'home.spots' | t: { n: m.rsvp.confirmed.length, cap: m.capacity } }}</p>
+        @if (isOrg()) {
+          <span class="chip chip-warn mt-3">📝 {{ 'match.resultMissing' | t }}</span>
+          <p class="hint">{{ 'match.resultMissingHint' | t }}</p>
+        } @else {
+          <p class="mt-2 text-sm muted">{{ 'match.resultPending' | t }}</p>
+        }
+      </div>
     }
 
     <!-- ── Completed: scoreboard ─────────────────── -->
@@ -80,7 +95,7 @@
     @if (!isOrg() && m.status !== 'cancelled') {
       @if (m.teamsPublished && (m.teamA.length || m.teamB.length)) {
         <div class="mt-5"><app-pitch [teamA]="m.teamA" [teamB]="m.teamB" [players]="players()" [stats]="m.stats" [mvp]="m.mvp" [showStrength]="m.status === 'upcoming'" /></div>
-      } @else if (m.status === 'upcoming') {
+      } @else if (m.status === 'upcoming' && !m.kickedOff) {
         <p class="card card-pad mt-4 text-center text-sm muted">👕 {{ 'match.teamsHidden' | t }}</p>
       }
     }
@@ -91,7 +106,7 @@
     }
 
     <!-- ── Organizer tools ───────────────────────── -->
-    @if (isOrg() && m.status === 'upcoming') {
+    @if (isOrg() && m.status === 'upcoming' && !m.kickedOff) {
       <label class="card card-pad mt-3 flex items-start gap-3">
         <input #repeat type="checkbox" [checked]="m.repeatWeekly" [disabled]="busy()" (change)="setRepeat(repeat.checked)" class="mt-0.5 h-5 w-5 shrink-0 accent-emerald-500" />
         <span><span class="block text-sm font-bold">🔁 {{ 'match.repeatWeekly' | t }}</span><span class="hint !mt-0.5 block">{{ 'match.repeatHint' | t }}</span></span>
@@ -111,6 +126,7 @@
 
           <!-- Players -->
           @case ('players') {
+            @if (!m.kickedOff) {
             <!-- Notify the group -->
             <div class="card card-pad">
               <div class="mb-1 font-black">{{ 'match.notifyTitle' | t }}</div>
@@ -154,6 +170,7 @@
               </div>
             }
 
+            }
             <ng-container [ngTemplateOutlet]="rsvpLists" [ngTemplateOutletContext]="{ m: m, editable: true }" />
             @if (unanswered().length) {
               <div class="section-title">{{ 'match.addPlayer' | t }}</div>
@@ -253,7 +270,7 @@
           <!-- Result -->
           @case ('result') {
             @if (!m.teamA.length || !m.teamB.length) {
-              <p class="card card-pad text-center text-sm muted">{{ 'match.teamsHidden' | t }}</p>
+              <p class="card card-pad text-center text-sm muted">{{ 'match.setTeamsFirst' | t }}</p>
             } @else {
               <div class="card card-pad">
                 <div class="text-center text-xs font-bold uppercase muted">{{ 'match.score' | t }}</div>

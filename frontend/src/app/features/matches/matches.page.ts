@@ -51,11 +51,15 @@ import { PullToRefreshDirective } from '../../shared/ui/pull-to-refresh.directiv
                 <div class="mt-1.5 flex flex-wrap gap-1.5">
                   @switch (m.status) {
                     @case ('upcoming') {
+                      @if (m.kickedOff) {
+                        <span class="chip chip-warn">📝 {{ (auth.isOrganizer() ? 'match.resultMissing' : 'match.resultPending') | t }}</span>
+                      } @else {
                       <span class="chip">{{ 'home.spots' | t: { n: m.rsvp.confirmed.length, cap: m.capacity } }}</span>
                       @if (m.myPlace === 'confirmed') { <span class="chip chip-primary">{{ 'home.youreIn' | t }}</span> }
                       @if (m.myPlace === 'waitlist') { <span class="chip chip-warn">{{ 'match.waitlist' | t }}</span> }
                       @if (m.teamsPublished) { <span class="chip">👕</span> }
                       @if (m.repeatWeekly) { <span class="chip">🔁 {{ 'match.repeats' | t }}</span> }
+                      }
                     }
                     @case ('cancelled') { <span class="chip chip-danger">{{ 'match.cancelled' | t }}</span> }
                     @case ('completed') {

@@ -58,9 +58,10 @@ import { celebrate } from '../../core/celebrate';
           </div>
           <div class="grid grid-cols-3 gap-2">
             @for (o of options; track o.status) {
-              <button class="btn !px-2 text-sm" [disabled]="busy()"
+              @let noSpot = o.status === 'in' && full() && m.myPlace !== 'confirmed';
+              <button class="btn !px-2 text-sm" [disabled]="busy() || noSpot"
                       [ngClass]="m.myRsvp === o.status ? o.on : 'btn-ghost'"
-                      (click)="reply(o.status, $event)">{{ o.label | t }}</button>
+                      (click)="reply(o.status, $event)">{{ (noSpot ? 'home.full' : o.label) | t }}</button>
             }
           </div>
         }
@@ -96,6 +97,8 @@ export class RsvpCardComponent implements OnInit {
     { status: 'out', label: 'home.out', on: 'btn-danger' }
   ];
 
+  /** Every spot is taken (no waitlist: someone has to drop out first). */
+  full = computed(() => this.match().rsvp.confirmed.length >= this.match().capacity);
   spotsLeft = computed(() => Math.max(0, this.match().capacity - this.match().rsvp.confirmed.length));
   waitPos = computed(() => {
     const me = this.auth.player()?._id;

@@ -181,18 +181,24 @@ describe('Match week', () => {
         matchId = res.body._id;
     });
 
-    it('fills 10 spots and puts the 11th on the waitlist', async () => {
+    it('fills 10 spots and refuses an 11th "in" (no waitlist)', async () => {
         for (const key of ['boss', ...Array.from({ length: 9 }, (_, i) => `p${i}`)]) {
             expect((await request(app).post(`/api/matches/${matchId}/rsvp`).set(auth(key)).send({ status: 'in' })).status).toBe(200);
         }
         const res = await request(app).post(`/api/matches/${matchId}/rsvp`).set(auth('p9')).send({ status: 'in' });
-        expect(res.body.myPlace).toBe('waitlist');
-        expect(res.body.rsvp.confirmed).toHaveLength(10);
+        expect(res.status).toBe(409);
+        // "Maybe" is still fine, and the organizer can't squeeze someone in either, or shrink the match.
+        expect((await request(app).post(`/api/matches/${matchId}/rsvp`).set(auth('p9')).send({ status: 'maybe' })).status).toBe(200);
+        expect((await request(app).post(`/api/matches/${matchId}/roster`).set(auth('boss')).send({ playerId: people.p9.playerId, status: 'in' })).status).toBe(409);
+        expect((await request(app).put(`/api/matches/${matchId}`).set(auth('boss')).send({ capacity: 8 })).status).toBe(400);
+        const match = (await request(app).get(`/api/matches/${matchId}`).set(auth('p9'))).body;
+        expect(match.rsvp.confirmed).toHaveLength(10);
+        expect(match.rsvp.waitlist).toHaveLength(0);
     });
 
-    it('moves the waitlist up when someone drops, and records the late drop-out', async () => {
+    it('opens a spot when someone drops out, and records the late drop-out', async () => {
         await request(app).post(`/api/matches/${matchId}/rsvp`).set(auth('p8')).send({ status: 'out' });
-        const res = await request(app).get(`/api/matches/${matchId}`).set(auth('p9'));
+        const res = await request(app).post(`/api/matches/${matchId}/rsvp`).set(auth('p9')).send({ status: 'in' });
         expect(res.body.myPlace).toBe('confirmed');
         expect(JSON.stringify(res.body)).not.toContain('lateDrops');
     });
@@ -434,6 +440,39 @@ describe('Organizer favourites and match details', () => {
     });
 });
 
+describe('Kick-off: replies lock and the match becomes history', () => {
+    it('closes replies at kick-off, lists it under Past, and asks the organizer for the result', async () => {
+        const { default: Match } = await import('../models/Match.js');
+        const { runDueJobs } = await import('../services/schedulerService.js');
+        const hour = 3600 * 1000;
+        const created = (await request(app).post('/api/matches').set(auth('boss'))
+            .send({ place: 'History Park', kickoff: new Date(Date.now() + 5 * hour).toISOString() })).body;
+        const id = created._id;
+        expect(created.kickedOff).toBe(false);
+        await request(app).post(`/api/matches/${id}/rsvp`).set(auth('p1')).send({ status: 'in' });
+
+        // Three hours after kick-off, with no result entered.
+        await Match.updateOne({ _id: id }, { $set: { kickoff: new Date(Date.now() - 3 * hour) } });
+        expect((await request(app).post(`/api/matches/${id}/rsvp`).set(auth('p1')).send({ status: 'out' })).status).toBe(400);
+        expect((await request(app).post(`/api/matches/${id}/notify`).set(auth('boss')).send({ kind: 'ask' })).status).toBe(400);
+        const upcoming = (await request(app).get('/api/matches?scope=upcoming').set(auth('p1'))).body.matches.map(m => m._id);
+        const past = (await request(app).get('/api/matches?scope=past').set(auth('p1'))).body.matches;
+        expect(upcoming).not.toContain(id);
+        expect(past.find(m => m._id === id)).toMatchObject({ kickedOff: true, status: 'upcoming' });
+
+        // Only the organizer can still change it.
+        expect((await request(app).post(`/api/matches/${id}/roster`).set(auth('p1')).send({ playerId: people.p2.playerId, status: 'in' })).status).toBe(403);
+        expect((await request(app).post(`/api/matches/${id}/roster`).set(auth('boss')).send({ playerId: people.p2.playerId, status: 'in' })).status).toBe(200);
+
+        // One result reminder (opening the list already ran the jobs), not a second one straight after.
+        await runDueJobs({ force: true });
+        expect((await runDueJobs({ force: true })).results).toBe(0);
+        const seen = (await request(app).get(`/api/matches/${id}`).set(auth('boss'))).body;
+        expect(seen.notifications.map(n => n.kind)).toContain('result1');
+        await request(app).delete(`/api/matches/${id}`).set(auth('boss'));
+    });
+});
+
 describe('Weekly repeat and automatic reminders', () => {
     it('reminds the group the day before, once, and creates next week\'s match at kick-off', async () => {
         const { default: Match } = await import('../models/Match.js');
@@ -466,7 +505,7 @@ describe('Weekly repeat and automatic reminders', () => {
         // The organizer can stop the series; turning reminders off silences them.
         expect((await request(app).put(`/api/matches/${next._id}`).set(auth('boss')).send({ repeatWeekly: false })).body.repeatWeekly).toBe(false);
         expect((await request(app).put('/api/organizer/settings').set(auth('boss')).send({ autoReminders: false })).body.autoReminders).toBe(false);
-        for (const m of upcoming) await request(app).delete(`/api/matches/${m._id}`).set(auth('boss'));
+        for (const m of [...upcoming, { _id: id }]) await request(app).delete(`/api/matches/${m._id}`).set(auth('boss'));
     });
 });
 

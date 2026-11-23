@@ -2,6 +2,8 @@
  * Things the app does by itself, on a timer:
  *   - Weekly repeat: when a repeating match kicks off, next week's match is created.
  *   - Reminders: the day before (everyone) and about 2 hours before (confirmed players).
+ *   - Result reminders: the organizer is asked for a missing result 2 hours after kick-off,
+ *     and once more about a day later, so the history stays complete.
  *
  * There is no separate worker. runDueJobs() is called every few minutes while the
  * server is awake, and whenever someone opens the app or a monitor pings /health,
@@ -9,9 +11,10 @@
  */
 import Match from '../models/Match.js';
 import Player from '../models/Player.js';
+import User from '../models/User.js';
 import { getSettings } from '../models/Settings.js';
 import { formatKickoff, rsvpLists } from './matchService.js';
-import { notifyEveryone, notifyPlayers } from './pushService.js';
+import { notifyEveryone, notifyPlayers, notifyUsers } from './pushService.js';
 
 const MIN = 60 * 1000;
 const HOUR = 60 * MIN;
@@ -103,22 +106,48 @@ export const sendDueReminders = async (now = new Date()) => {
     return sent;
 };
 
+/** Asks the organizer for results still missing after kick-off. Returns how many reminders went out. */
+export const sendResultReminders = async (now = new Date()) => {
+    if ((await getSettings()).autoReminders === false) return 0;
+    // Only the last week: an old backlog shouldn't turn into a burst of messages.
+    const matches = await Match.find({
+        status: 'upcoming',
+        kickoff: { $gte: new Date(+now - 7 * DAY), $lte: new Date(+now - 2 * HOUR) }
+    });
+    if (!matches.length) return 0;
+    const organizers = (await User.find({ role: 'organizer' }).select('_id').lean()).map(u => u._id);
+    let sent = 0;
+    for (const match of matches) {
+        const first = match.notifications.find(n => n.kind === 'result1');
+        const kind = !first ? 'result1' : now - new Date(first.at) >= 20 * HOUR ? 'result2' : null;
+        if (!kind || !(await claimReminder(match, kind, organizers.length))) continue;
+        await notifyUsers(organizers, {
+            title: `📝 Enter the result: ${match.place}`,
+            body: `${formatKickoff(match.kickoff)}. Add the score so the history and ratings stay complete.`,
+            url: `/matches/${match._id}?tab=result`
+        }, { email: true });
+        sent++;
+    }
+    return sent;
+};
+
 let lastRun = 0;
 let running = null;
 
 /** Runs both jobs, at most once a minute unless forced. Never throws: a failed job must not break a page load. */
 export const runDueJobs = async ({ force = false } = {}) => {
     if (running) return running;
-    if (!force && Date.now() - lastRun < MIN) return { spawned: 0, reminders: 0 };
+    if (!force && Date.now() - lastRun < MIN) return { spawned: 0, reminders: 0, results: 0 };
     lastRun = Date.now();
     running = (async () => {
         try {
             const spawned = await spawnRecurringMatches();
             const reminders = await sendDueReminders();
-            return { spawned, reminders };
+            const results = await sendResultReminders();
+            return { spawned, reminders, results };
         } catch (err) {
             console.error('Scheduled jobs failed:', err.message);
-            return { spawned: 0, reminders: 0 };
+            return { spawned: 0, reminders: 0, results: 0 };
         } finally {
             running = null;
         }

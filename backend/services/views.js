@@ -108,6 +108,8 @@ const matchSummary = (m, viewer) => {
         capacity: m.capacity,
         repeatWeekly: !!m.repeatWeekly,
         status: m.status,
+        // Replies closed and the match is history (result may still be missing).
+        kickedOff: new Date(m.kickoff).getTime() <= Date.now(),
         rsvp: lists,
         myRsvp: myRsvp ? myRsvp.status : null,
         myPlace: lists.confirmed.includes(me) ? 'confirmed' : lists.waitlist.includes(me) ? 'waitlist' : null,

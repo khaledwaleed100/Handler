@@ -100,6 +100,8 @@ export interface Match {
   /** A new match is created automatically each week. */
   repeatWeekly: boolean;
   status: 'upcoming' | 'completed' | 'cancelled';
+  /** Past kick-off: replies are closed and the match is in history (the result may still be missing). */
+  kickedOff: boolean;
   rsvp: { confirmed: string[]; waitlist: string[]; maybe: string[]; out: string[] };
   myRsvp: RsvpStatus | null;
   myPlace: 'confirmed' | 'waitlist' | null;

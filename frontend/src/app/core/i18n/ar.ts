@@ -26,7 +26,7 @@ export const ar: Dict = {
   home: {
     hello: 'أهلاً {name}', nextMatch: 'الماتش القادم', noMatch: 'لا يوجد ماتش محدد بعد', noMatchHint: 'سينشر المنظم الماتش القادم قريباً.',
     createMatch: 'إنشاء ماتش', in: 'أنا جاي', out: 'مش هقدر', maybe: 'يمكن', youreIn: 'أنت مشارك ✅', youreOut: 'أنت معتذر', youreMaybe: 'قلت يمكن',
-    waitlist: 'أنت في قائمة الانتظار (#{n})', spots: '{n}/{cap} مؤكد', spotsLeft: 'باقي {n} أماكن', full: 'العدد مكتمل، الردود الجديدة تدخل قائمة الانتظار',
+    waitlist: 'أنت في قائمة الانتظار (#{n})', spots: '{n}/{cap} مؤكد', spotsLeft: 'باقي {n} أماكن', full: 'العدد مكتمل',
     seeTeams: 'شاهد الفرق', todo: 'مطلوب منك', rateTitle: 'قيّم {n} لاعبين من ماتش {place}', rateHint: 'حوالي 30 ثانية · بدون أسماء',
     pay: 'عليك {amount} لماتش {place}', disputes: '{n} طلبات مراجعة مواعيد', needResult: 'أدخل نتيجة ماتش {place}',
     pollOpen: 'تصويت لاعب الأسبوع مفتوح', kickoffIn: 'البداية بعد {t}', startedAgo: 'بدأ منذ {t}', allDone: 'لا يوجد شيء مطلوب'
@@ -36,7 +36,7 @@ export const ar: Dict = {
     notifyTitle: 'أرسل تنبيهاً للمجموعة', notifyAsk: 'اسأل مين جاي', notifyAskHint: 'كل من لم يرد بعد', notifySoon: 'الماتش قرب', notifySoonHint: 'اللاعبين المؤكدين', notifyMessage: 'أرسل رسالة', notifyMessageHint: 'كل من في الماتش', notifyDetails: 'أرسل التفاصيل بالبريد', notifyDetailsHint: 'كل من في الماتش يصله المكان والموعد والخريطة والفرق', quickAdd: 'المفضلون · اضغط للإضافة كـ "جاي"', notifyPlaceholder: 'رسالتك…', notifySend: 'إرسال', notifySent: 'تم الإرسال إلى {n} أشخاص', notifyLast: 'آخر إرسال منذ {t}', notifyHow: 'يصل كإشعار على الهاتف وكبريد إلكتروني.', notifyWhatsapp: 'انشر في جروب الواتساب', seen: 'شاف', notSeen: 'لم يشاهد', noReplyTitle: 'لم يرد بعد',
     upcoming: 'القادمة', past: 'السابقة', newMatch: 'ماتش جديد', place: 'المكان', mapLink: 'رابط الخريطة', date: 'التاريخ', time: 'موعد البداية', capacity: 'عدد اللاعبين', price: 'السعر للفرد',
     create: 'إنشاء الماتش', creating: 'جارٍ الإنشاء…', created: 'تم إنشاء الماتش وإبلاغ الجميع.', none: 'لا توجد ماتشات هنا بعد', cancelled: 'ملغي', completed: 'انتهى',
-    repeatWeekly: 'كرّر كل أسبوع', repeatHint: 'ماتش الأسبوع القادم يُنشأ تلقائياً عند بداية الماتش: نفس المكان واليوم والموعد.', repeats: 'أسبوعي', addToCalendar: 'أضف للتقويم', directions: 'الاتجاهات', shareInvite: 'شارك على واتساب', confirmed: 'مؤكد', waitlist: 'الانتظار', maybe: 'يمكن', out: 'معتذر', noReply: 'لم يرد بعد',
+    repeatWeekly: 'كرّر كل أسبوع', repeatHint: 'ماتش الأسبوع القادم يُنشأ تلقائياً عند بداية الماتش: نفس المكان واليوم والموعد.', repeats: 'أسبوعي', kickedOff: 'بدأ الماتش · الردود مغلقة', resultMissing: 'النتيجة ناقصة', resultMissingHint: 'حدّد الفرق إن لزم، ثم أدخل النتيجة من تبويب النتيجة.', resultPending: 'النتيجة لم تُسجّل بعد.', setTeamsFirst: 'حدّد الفرق أولاً (تبويب الفرق)، ثم أدخل النتيجة هنا.', addToCalendar: 'أضف للتقويم', directions: 'الاتجاهات', shareInvite: 'شارك على واتساب', confirmed: 'مؤكد', waitlist: 'الانتظار', maybe: 'يمكن', out: 'معتذر', noReply: 'لم يرد بعد',
     tabPlayers: 'اللاعبين', tabTeams: 'الفرق', tabCheckin: 'الحضور', tabResult: 'النتيجة', tabMoney: 'الفلوس',
     setStatus: 'حدد رد لاعب', addPlayer: 'أضف لاعباً', remove: 'إزالة',
     makeTeams: 'قسّم الفرق', remake: 'اقترح من جديد', option: 'اقتراح {n}', balance: 'التوازن {n}%', prefs: 'تحقق {met} من {total} رغبات', noPrefs: 'لا توجد رغبات',

@@ -8,7 +8,7 @@ import * as v from '../utils/validate.js';
 import { isOrganizer } from '../middlewares/authMiddleware.js';
 import { matchListView, matchView, publicPlayer } from '../services/views.js';
 import {
-    checkIn, completeMatch, finalizeDueMatches, finalizeRatings, formatKickoff, playersByIds, recentTeams, rsvpLists, setRsvp
+    checkIn, completeMatch, finalizeDueMatches, finalizeRatings, formatKickoff, hasKickedOff, playersByIds, recentTeams, rsvpLists, setRsvp
 } from '../services/matchService.js';
 import { runDueJobs } from '../services/schedulerService.js';
 import { balanceTeams, MAX_PLAYERS } from '../services/balancingService.js';
@@ -34,7 +34,11 @@ export const listMatches = async (req, res) => {
     await finalizeDueMatches();
     await runDueJobs();
     const past = req.query.scope === 'past';
-    const filter = past ? { status: { $in: ['completed', 'cancelled'] } } : { status: 'upcoming' };
+    const now = new Date();
+    // A match moves to Past at kick-off, whether or not the result is in yet.
+    const filter = past
+        ? { $or: [{ status: { $in: ['completed', 'cancelled'] } }, { status: 'upcoming', kickoff: { $lte: now } }] }
+        : { status: 'upcoming', kickoff: { $gt: now } };
     const matches = await Match.find(filter).sort({ kickoff: past ? -1 : 1 }).limit(past ? 30 : 20);
     res.json(await matchListView(matches, viewer(req)));
 };
@@ -99,6 +103,7 @@ export const notifyGroup = async (req, res) => {
     const kind = req.body?.kind;
     if (!NOTIFY_KINDS[kind]) throw httpError(400, 'Invalid notification');
     const note = v.str(req.body?.note, { max: 200, field: 'Message', required: kind === 'message' });
+    if (kind !== 'message' && hasKickedOff(match)) throw httpError(400, 'The match has already kicked off');
 
     const last = [...match.notifications].reverse().find(n => n.kind === kind);
     if (last && Date.now() - new Date(last.at) < 30 * 60 * 1000) {
@@ -151,6 +156,10 @@ export const createMatch = async (req, res) => {
 export const updateMatch = async (req, res) => {
     const match = await loadMatch(req.params.id);
     const fields = readMatchFields(req.body || {}, { partial: true });
+    const confirmed = rsvpLists(match).confirmed.length;
+    if (fields.capacity !== undefined && fields.capacity < confirmed) {
+        throw httpError(400, `${confirmed} players are already in. Ask someone to drop out first.`);
+    }
     Object.assign(match, fields);
     if (req.body?.cancelled === true && match.status === 'upcoming') {
         match.status = 'cancelled';
@@ -181,6 +190,7 @@ export const rsvp = async (req, res) => {
     if (!req.player) throw httpError(404, 'Player profile not found');
     const match = await loadMatch(req.params.id);
     requireUpcoming(match);
+    if (hasKickedOff(match)) throw httpError(400, 'Replies closed at kick-off');
     if (!RSVP_STATES.includes(req.body?.status)) throw httpError(400, 'Invalid reply');
     await setRsvp(match, req.player._id, req.body.status);
     res.json(await matchView(match, viewer(req)));

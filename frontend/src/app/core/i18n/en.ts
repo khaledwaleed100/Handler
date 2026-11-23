@@ -24,7 +24,7 @@ export const en = {
   home: {
     hello: 'Hi {name}', nextMatch: 'Next match', noMatch: 'No match scheduled yet', noMatchHint: 'The organizer will post the next one soon.',
     createMatch: 'Create a match', in: 'I\'m in', out: 'Can\'t make it', maybe: 'Maybe', youreIn: 'You\'re in ✅', youreOut: 'You\'re out', youreMaybe: 'You said maybe',
-    waitlist: 'You\'re on the waitlist (#{n})', spots: '{n}/{cap} in', spotsLeft: '{n} spots left', full: 'Full, new replies join the waitlist',
+    waitlist: 'You\'re on the waitlist (#{n})', spots: '{n}/{cap} in', spotsLeft: '{n} spots left', full: 'Full',
     seeTeams: 'See the teams', todo: 'To do', rateTitle: 'Rate {n} players from {place}', rateHint: 'About 30 seconds · anonymous',
     pay: 'You owe {amount} for {place}', disputes: '{n} punctuality requests to review', needResult: 'Enter the result for {place}',
     pollOpen: 'Player of the Week vote is open', kickoffIn: 'Kick-off in {t}', startedAgo: 'Kicked off {t} ago', allDone: 'All caught up'
@@ -34,7 +34,7 @@ export const en = {
     notifyTitle: 'Notify the group', notifyAsk: 'Ask who\'s in', notifyAskHint: 'Everyone who hasn\'t answered yet', notifySoon: 'Kick-off soon', notifySoonHint: 'Confirmed players', notifyMessage: 'Send a message', notifyMessageHint: 'Everyone in the match', notifyDetails: 'Email the details', notifyDetailsHint: 'Everyone in the match gets the place, time, map and teams', quickAdd: 'Favourites · tap to add as "in"', notifyPlaceholder: 'Your message…', notifySend: 'Send', notifySent: 'Sent to {n} people', notifyLast: 'Last sent {t} ago', notifyHow: 'Arrives as a phone notification and an email.', notifyWhatsapp: 'Post in the WhatsApp group', seen: 'Seen', notSeen: 'Not seen', noReplyTitle: 'Not answered yet',
     upcoming: 'Upcoming', past: 'Past', newMatch: 'New match', place: 'Place', mapLink: 'Map link', date: 'Date', time: 'Kick-off', capacity: 'Players', price: 'Price per player',
     create: 'Create match', creating: 'Creating…', created: 'Match created. Everyone has been notified.', none: 'No matches here yet', cancelled: 'Cancelled', completed: 'Full time',
-    repeatWeekly: 'Repeat every week', repeatHint: 'Next week\'s match is created by itself at kick-off: same place, day and time.', repeats: 'Weekly', addToCalendar: 'Add to calendar', directions: 'Directions', shareInvite: 'Share on WhatsApp', confirmed: 'Confirmed', waitlist: 'Waitlist', maybe: 'Maybe', out: 'Out', noReply: 'No reply yet',
+    repeatWeekly: 'Repeat every week', repeatHint: 'Next week\'s match is created by itself at kick-off: same place, day and time.', repeats: 'Weekly', kickedOff: 'Kicked off · replies are closed', resultMissing: 'Result missing', resultMissingHint: 'Set the teams if needed, then enter the score in the Result tab.', resultPending: 'The result isn\'t in yet.', setTeamsFirst: 'Set the teams first (Teams tab), then enter the score here.', addToCalendar: 'Add to calendar', directions: 'Directions', shareInvite: 'Share on WhatsApp', confirmed: 'Confirmed', waitlist: 'Waitlist', maybe: 'Maybe', out: 'Out', noReply: 'No reply yet',
     tabPlayers: 'Players', tabTeams: 'Teams', tabCheckin: 'Check-in', tabResult: 'Result', tabMoney: 'Money',
     setStatus: 'Set reply for a player', addPlayer: 'Add a player', remove: 'Remove',
     makeTeams: 'Make teams', remake: 'Suggest again', option: 'Option {n}', balance: 'Balance {n}%', prefs: '{met}/{total} wishes met', noPrefs: 'No wishes',
