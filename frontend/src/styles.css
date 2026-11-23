@@ -395,9 +395,43 @@
 .rise { animation: rise .35s var(--ease-out) both; }
 .pop { animation: pop .35s var(--ease-spring) both; }
 
-/* Page transitions (View Transitions API, where supported). */
-::view-transition-old(root), ::view-transition-new(root) { animation-duration: .18s; }
+/* Page transitions (View Transitions API, where supported).
+   Going deeper (a match, a player) slides in from the side; going back slides the other way;
+   switching tabs cross-fades. Mirrored for Arabic. The tab bar stays put. */
+:root { --vt-shift: 24%; }
+:root[dir='rtl'] { --vt-shift: -24%; }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: .24s; animation-timing-function: var(--ease-out); }
+html[data-nav='forward']::view-transition-old(root) { animation-name: vt-out-back; }
+html[data-nav='forward']::view-transition-new(root) { animation-name: vt-in-ahead; }
+html[data-nav='back']::view-transition-old(root) { animation-name: vt-out-ahead; }
+html[data-nav='back']::view-transition-new(root) { animation-name: vt-in-back; }
+@keyframes vt-in-ahead { from { transform: translateX(var(--vt-shift)); opacity: 0; } }
+@keyframes vt-in-back { from { transform: translateX(calc(var(--vt-shift) * -0.35)); opacity: 0; } }
+@keyframes vt-out-back { to { transform: translateX(calc(var(--vt-shift) * -0.35)); opacity: 0; } }
+@keyframes vt-out-ahead { to { transform: translateX(var(--vt-shift)); opacity: 0; } }
+.tabbar { view-transition-name: tabbar; }
+
+/* Pull to refresh */
+.ptr {
+  position: fixed; top: calc(env(safe-area-inset-top) - 44px); left: 50%; z-index: 45;
+  display: flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 999px; opacity: 0; pointer-events: none;
+  background: var(--bg-elev); color: var(--text-muted); border: 1px solid var(--border); box-shadow: var(--shadow);
+  transform: translate(-50%, 0); transition: transform .3s var(--ease-out), opacity .2s, color .15s;
+}
+.ptr.dragging { transition: color .15s; }
+.ptr.ready { color: var(--primary); }
+.ptr-arrow { font-weight: 900; font-size: 18px; line-height: 1; transition: transform .2s; }
+.ptr.ready .ptr-arrow { transform: rotate(180deg); }
+.ptr.spinning { opacity: 1; color: var(--primary); }
+.ptr.spinning .ptr-arrow { display: none; }
+.ptr.spinning::after {
+  content: ''; width: 18px; height: 18px; border-radius: 999px;
+  border: 2.5px solid currentColor; border-top-color: transparent; animation: ptr-spin .7s linear infinite;
+}
+@keyframes ptr-spin { to { transform: rotate(360deg); } }
 
 @media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 }

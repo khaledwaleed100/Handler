@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { Poll, PollCandidate, PollService, PollStatus, PollType } from '../../core/services/poll.service';
 import { AuthService } from '../../core/auth.service';
@@ -7,6 +7,10 @@ import { Ui } from '../../core/ui.service';
 import { Api } from '../../core/api.service';
 import { AvatarComponent } from '../../shared/ui/avatar.component';
 import { IconComponent } from '../../shared/ui/icon.component';
+import { SkeletonComponent } from '../../shared/ui/skeleton.component';
+import { CountUpDirective } from '../../shared/ui/count-up.directive';
+import { PullToRefreshDirective } from '../../shared/ui/pull-to-refresh.directive';
+import { celebrate } from '../../core/celebrate';
 
 /**
  * Player of the Week / Month and Team of the Week voting.
@@ -17,9 +21,9 @@ import { IconComponent } from '../../shared/ui/icon.component';
 @Component({
   selector: 'app-polls',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgClass, TPipe, AvatarComponent, IconComponent],
+  imports: [NgClass, TPipe, AvatarComponent, IconComponent, SkeletonComponent, CountUpDirective, PullToRefreshDirective],
   template: `
-    <div class="page">
+    <div class="page" [pullToRefresh]="reload">
       <header class="mb-4">
         <h1 class="page-title">{{ 'poll.title' | t }}</h1>
         <p class="text-sm muted">{{ 'poll.subtitle' | t }}</p>
@@ -49,7 +53,8 @@ import { IconComponent } from '../../shared/ui/icon.component';
       }
 
       @if (!polls.loaded()) {
-        @for (i of [1, 2, 3]; track i) { <div class="skeleton mb-2 h-20"></div> }
+        <div class="skeleton mb-3 h-28 !rounded-3xl"></div>
+        <app-skeleton kind="rows" [count]="5" />
       } @else if (!polls.polls().length) {
         <div class="card card-pad text-center">
           <div class="text-5xl">🗳️</div>
@@ -140,7 +145,7 @@ import { IconComponent } from '../../shared/ui/icon.component';
                 </span>
                 <span class="relative text-end">
                   @if (showResults(poll)) {
-                    <span class="block text-2xl font-black leading-none num">{{ c.percent }}%</span>
+                    <span class="block text-2xl font-black leading-none num"><span [countUp]="c.percent"></span>%</span>
                     <span class="text-[11px] font-semibold muted">{{ 'poll.votes' | t: { n: c.votes } }}</span>
                   } @else {
                     <span class="block text-2xl font-black leading-none text-amber-500 num">{{ c.avgRating.toFixed(1) }}</span>
@@ -204,6 +209,20 @@ export class PollsComponent implements OnInit, OnDestroy {
   closingId = signal<string | null>(null);
   slow = signal(false);
   private slowTimer?: ReturnType<typeof setTimeout>;
+
+  readonly reload = () => this.polls.refresh();
+
+  constructor() {
+    // Confetti the first time this phone sees a poll's winners (bigger if you're one of them).
+    effect(() => {
+      const fresh = this.polls.polls().filter(p => !p.isActive && p.winnerIds.length && !celebrated().includes(p._id));
+      if (!fresh.length) return;
+      remember(fresh.map(p => p._id));
+      const me = this.auth.player()?._id;
+      const mine = !!me && fresh.some(p => p.winnerIds.includes(me));
+      setTimeout(() => celebrate({ count: mine ? 220 : 140 }), 350);
+    });
+  }
 
   ngOnInit() {
     this.slowTimer = setTimeout(() => this.slow.set(true), 4000);
@@ -307,7 +326,7 @@ export class PollsComponent implements OnInit, OnDestroy {
   async close(poll: Poll) {
     this.busy.set(true);
     try {
-      await this.polls.close(poll._id);
+      await this.polls.close(poll._id); // the winners' confetti comes from the check in the constructor
       this.closingId.set(null);
       await this.loadStatus();
     } catch (err) {
@@ -319,3 +338,12 @@ export class PollsComponent implements OnInit, OnDestroy {
 
   readonly pendingLabel = computed(() => this.i18n.t('poll.title'));
 }
+
+/** Poll ids this phone already celebrated (so confetti plays once, not on every visit). */
+const CELEBRATED = 'celebrated:v1';
+const celebrated = (): string[] => {
+  try { return JSON.parse(localStorage.getItem(CELEBRATED) || '[]'); } catch { return []; }
+};
+const remember = (ids: string[]) => {
+  try { localStorage.setItem(CELEBRATED, JSON.stringify([...celebrated(), ...ids].slice(-30))); } catch { /* storage blocked */ }
+};

@@ -4,6 +4,7 @@ import { OUTFIELD_ATTRIBUTES, PublicPlayer } from '../../core/models';
 import { TPipe } from '../../core/i18n/i18n.service';
 import { ratingTier } from '../../core/util';
 import { AvatarComponent } from './avatar.component';
+import { CountUpDirective } from './count-up.directive';
 
 /**
  * The player card, in two sizes:
@@ -14,7 +15,7 @@ import { AvatarComponent } from './avatar.component';
 @Component({
   selector: 'app-player-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgClass, TPipe, AvatarComponent],
+  imports: [NgClass, TPipe, AvatarComponent, CountUpDirective],
   template: `
     @if (variant() === 'row') {
       <div class="flex items-center gap-3 py-2.5">
@@ -46,7 +47,7 @@ import { AvatarComponent } from './avatar.component';
           <div class="relative flex items-center gap-4">
             <app-avatar [url]="player().avatarUrl" [name]="player().name" [size]="5" />
             <div class="min-w-0 flex-1">
-              <div class="text-5xl font-black leading-none num">{{ player().overall }}</div>
+              <div class="text-5xl font-black leading-none num" [countUp]="player().overall"></div>
               <div class="mt-1 truncate text-xl font-black">{{ player().name }}</div>
               <div class="text-sm font-bold opacity-90">{{ ('pos.' + player().position) | t }}</div>
             </div>

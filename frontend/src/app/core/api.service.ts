@@ -2,29 +2,73 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
+import { CacheService, Cached } from './cache.service';
+import { AuthService } from './auth.service';
 import {
   AdjustmentReason, AttendanceRecord, Attributes, GroupSettings, Home, Match, MatchList, MatchWithPlayers, Me,
   MemberView, NotifyKind, OrganizerOverview, PlayerProfile, Position, Preferences, PublicPlayer, RatingTask, RsvpStatus, TeamOption
 } from './models';
 
-/** Every API call in one place. Returns promises, which read nicely with async/await in screens. */
+/** Changes that don't affect what any screen shows, so they keep the saved screens. */
+const NO_SCREEN_CHANGE = /^\/me\/(push|feedback|preferences)/;
+
+/**
+ * Every API call in one place. Returns promises, which read nicely with async/await in screens.
+ * Every answer is remembered (see CacheService), so a screen can show the last one instantly
+ * through `cached` while it asks the server for a fresh one.
+ */
 @Injectable({ providedIn: 'root' })
 export class Api {
   private http = inject(HttpClient);
+  private cache = inject(CacheService);
+  private auth = inject(AuthService);
   private base = environment.apiUrl;
 
-  private get<T>(path: string, params?: Record<string, string>) {
-    return firstValueFrom(this.http.get<T>(`${this.base}${path}`, { params }));
+  private async get<T>(path: string, params?: Record<string, string>) {
+    const data = await firstValueFrom(this.http.get<T>(`${this.base}${path}`, { params }));
+    this.cache.put(cacheKey(path, params), data);
+    return data;
+  }
+  private async changed<T>(request: Promise<T>, path: string) {
+    const res = await request;
+    if (!NO_SCREEN_CHANGE.test(path)) this.cache.invalidate();
+    return res;
   }
   private post<T>(path: string, body: unknown = {}) {
-    return firstValueFrom(this.http.post<T>(`${this.base}${path}`, body));
+    return this.changed(firstValueFrom(this.http.post<T>(`${this.base}${path}`, body)), path);
   }
   private put<T>(path: string, body: unknown) {
-    return firstValueFrom(this.http.put<T>(`${this.base}${path}`, body));
+    return this.changed(firstValueFrom(this.http.put<T>(`${this.base}${path}`, body)), path);
   }
   private del<T>(path: string, body?: unknown) {
-    return firstValueFrom(this.http.delete<T>(`${this.base}${path}`, { body }));
+    return this.changed(firstValueFrom(this.http.delete<T>(`${this.base}${path}`, { body })), path);
   }
+
+  /** The last answer for a screen (or null), to show while the fresh one loads. */
+  readonly cached = {
+    home: () => this.cache.peek<Home>('/home'),
+    matches: (scope: 'upcoming' | 'past') => this.cache.peek<MatchList>(cacheKey('/matches', { scope })),
+    match: (id: string) => this.cache.peek<MatchWithPlayers>(`/matches/${id}`),
+    players: () => this.cache.peek<PublicPlayer[]>('/players'),
+    player: (id: string) => this.cache.peek<PlayerProfile>(`/players/${id}`),
+    overview: () => this.cache.peek<OrganizerOverview>('/organizer/overview')
+  } satisfies Record<string, (...args: never[]) => Cached<unknown> | null>;
+
+  /**
+   * Whether to put a saved copy on screen straight away. Up-to-date copies: always. Copies from
+   * before a change: only while the app is still confirming the session (just opened, server
+   * waking up), so a reply you just made never flashes back to the old answer.
+   * Any saved copy is still used when the server can't be reached.
+   */
+  showNow<T>(saved: Cached<T> | null): saved is Cached<T> {
+    return !!saved && (!saved.stale || this.auth.provisional());
+  }
+
+  /** Updates the saved copy after a screen changed its own data (e.g. a reply on Home). */
+  remember = {
+    home: (h: Home) => this.cache.put('/home', h),
+    match: (m: MatchWithPlayers) => this.cache.put(`/matches/${m._id}`, m)
+  };
 
   // Home & settings
   home() { return this.get<Home>('/home'); }
@@ -92,5 +136,8 @@ export class Api {
     return this.post<{ ok: boolean }>('/organizer/disputes', { matchId, playerId, decision });
   }
 }
+
+const cacheKey = (path: string, params?: Record<string, string>) =>
+  params ? `${path}?${new URLSearchParams(params)}` : path;
 
 export type { Match };

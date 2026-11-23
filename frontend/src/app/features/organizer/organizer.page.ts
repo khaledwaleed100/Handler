@@ -9,13 +9,14 @@ import { Ui } from '../../core/ui.service';
 import { whatsappLink } from '../../core/util';
 import { AvatarComponent } from '../../shared/ui/avatar.component';
 import { IconComponent } from '../../shared/ui/icon.component';
+import { SkeletonComponent } from '../../shared/ui/skeleton.component';
 
 const REASONS: AdjustmentReason[] = ['injury_return', 'new_player', 'plays_differently'];
 
 @Component({
   selector: 'app-organizer',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgClass, FormsModule, RouterLink, TPipe, AvatarComponent, IconComponent],
+  imports: [NgClass, FormsModule, RouterLink, TPipe, AvatarComponent, IconComponent, SkeletonComponent],
   templateUrl: './organizer.page.html'
 })
 export class OrganizerPage implements OnInit {
@@ -64,6 +65,11 @@ export class OrganizerPage implements OnInit {
   }
 
   async load() {
+    const saved = this.api.cached.overview();
+    if (this.api.showNow(saved)) {
+      this.data.set(saved.data);
+      this.settings = { ...saved.data.settings };
+    }
     try {
       const d = await this.api.overview();
       this.data.set(d);

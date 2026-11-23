@@ -1,6 +1,5 @@
 import { HttpErrorResponse, HttpInterceptorFn, HttpRequest } from '@angular/common/http';
 import { inject } from '@angular/core';
-import { Router } from '@angular/router';
 import { catchError, from, switchMap, throwError } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { AuthService } from './auth.service';
@@ -9,27 +8,28 @@ const isApi = (req: HttpRequest<unknown>) => req.url.startsWith(environment.apiU
 const isAuthCall = (req: HttpRequest<unknown>) => req.url.startsWith(`${environment.apiUrl}/auth/`);
 
 /**
- * Adds the access token to API calls. If the token has expired (401), it gets a
- * new one with the refresh cookie and retries once, so people are never thrown
+ * Adds the access token to API calls. If a refresh is already under way (e.g. the
+ * app just opened), the call waits for it. If the token has expired (401), it gets
+ * a new one with the refresh cookie and retries once, so people are never thrown
  * out of the app every 15 minutes.
  */
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   if (!isApi(req)) return next(req);
   const auth = inject(AuthService);
-  const router = inject(Router);
 
   const withToken = (r: HttpRequest<unknown>) => {
     const token = auth.token();
     return token && !isAuthCall(r) ? r.clone({ setHeaders: { Authorization: `Bearer ${token}` } }) : r;
   };
 
-  return next(withToken(req)).pipe(
+  const send = () => next(withToken(req)).pipe(
     catchError((err: HttpErrorResponse) => {
       if (err.status !== 401 || isAuthCall(req)) return throwError(() => err);
       return from(auth.refresh()).pipe(
         switchMap(ok => {
           if (!ok) {
-            router.navigate(['/login'], { queryParams: { returnUrl: router.url } });
+            // Only leave for the login page when the session really ended (not when offline).
+            if (!auth.isLoggedIn()) auth.toLogin();
             return throwError(() => err);
           }
           return next(withToken(req));
@@ -37,6 +37,9 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
       );
     })
   );
+
+  const pending = isAuthCall(req) ? null : auth.pending();
+  return pending ? from(pending).pipe(switchMap(() => send())) : send();
 };
 
 /** Turns any HTTP error into a human message. */

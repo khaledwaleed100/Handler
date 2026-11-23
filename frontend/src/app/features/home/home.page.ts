@@ -10,14 +10,17 @@ import { RsvpCardComponent } from '../../shared/ui/rsvp-card.component';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { AvatarComponent } from '../../shared/ui/avatar.component';
 import { ThemeToggleComponent } from '../../shared/ui/theme-toggle.component';
+import { SavedNoteComponent } from '../../shared/ui/saved-note.component';
+import { SkeletonComponent } from '../../shared/ui/skeleton.component';
+import { PullToRefreshDirective } from '../../shared/ui/pull-to-refresh.directive';
 
 /** Home answers one question: "what do I need to do?" */
 @Component({
   selector: 'app-home',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, TPipe, RsvpCardComponent, IconComponent, AvatarComponent, ThemeToggleComponent],
+  imports: [RouterLink, TPipe, RsvpCardComponent, IconComponent, AvatarComponent, ThemeToggleComponent, SavedNoteComponent, SkeletonComponent, PullToRefreshDirective],
   template: `
-    <div class="page">
+    <div class="page" [pullToRefresh]="reload">
       <header class="mb-5 flex items-center gap-3">
         <a routerLink="/me" class="shrink-0" [attr.aria-label]="'nav.me' | t">
           <app-avatar [url]="auth.player()?.avatarUrl" [name]="auth.user()?.name || ''" [size]="2.75" />
@@ -32,9 +35,12 @@ import { ThemeToggleComponent } from '../../shared/ui/theme-toggle.component';
         }
       </header>
 
+      <app-saved-note [at]="savedAt()" />
       @if (loading() && !home()) {
-        <div class="skeleton h-72"></div>
-        <div class="skeleton mt-4 h-20"></div>
+        <div class="skeleton mb-2 h-3 w-24"></div>
+        <app-skeleton kind="match" />
+        <div class="skeleton mb-2 mt-6 h-3 w-16"></div>
+        <app-skeleton kind="rows" [count]="1" />
       } @else if (home(); as h) {
         <h2 class="section-title !mt-0">{{ 'home.nextMatch' | t }}</h2>
         @if (h.next) {
@@ -104,6 +110,8 @@ export class HomePage implements OnInit {
 
   home = signal<Home | null>(null);
   loading = signal(true);
+  /** Set when the server couldn't be reached and the saved copy is showing. */
+  savedAt = signal<number | null>(null);
 
   firstName = computed(() => (this.auth.user()?.name || '').split(' ')[0]);
   nothingToDo = computed(() => {
@@ -111,17 +119,23 @@ export class HomePage implements OnInit {
     return !!t && !t.rate.length && !t.disputes && !(t.needResult?.length) && this.polls.pendingVotes() === 0;
   });
 
+  readonly reload = () => Promise.all([this.load(), this.polls.refresh().catch(() => undefined)]);
+
   ngOnInit() {
     this.load();
     this.polls.refresh().catch(() => {});
   }
 
   async load() {
+    // Last time's copy first, so Home opens instantly; then the fresh one.
+    const saved = this.api.cached.home();
+    if (this.api.showNow(saved)) this.home.set(saved.data);
     this.loading.set(true);
     try {
       this.home.set(await this.api.home());
+      this.savedAt.set(null);
     } catch (err) {
-      this.ui.error(err);
+      if (saved) { this.home.set(saved.data); this.savedAt.set(saved.at); } else this.ui.error(err);
     } finally {
       this.loading.set(false);
     }
@@ -129,5 +143,7 @@ export class HomePage implements OnInit {
 
   onRsvp(match: MatchWithPlayers) {
     this.home.update(h => (h ? { ...h, next: match } : h));
+    const h = this.home();
+    if (h) this.api.remember.home(h);
   }
 }

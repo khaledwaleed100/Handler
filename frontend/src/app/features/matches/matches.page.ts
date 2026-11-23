@@ -8,13 +8,16 @@ import { Match, MatchList } from '../../core/models';
 import { Ui } from '../../core/ui.service';
 import { toIso, todayInput } from '../../core/util';
 import { IconComponent } from '../../shared/ui/icon.component';
+import { SavedNoteComponent } from '../../shared/ui/saved-note.component';
+import { SkeletonComponent } from '../../shared/ui/skeleton.component';
+import { PullToRefreshDirective } from '../../shared/ui/pull-to-refresh.directive';
 
 @Component({
   selector: 'app-matches',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, RouterLink, TPipe, IconComponent],
+  imports: [FormsModule, RouterLink, TPipe, IconComponent, SavedNoteComponent, SkeletonComponent, PullToRefreshDirective],
   template: `
-    <div class="page">
+    <div class="page" [pullToRefresh]="reload">
       <header class="mb-4 flex items-center justify-between">
         <h1 class="page-title">{{ 'nav.matches' | t }}</h1>
         @if (auth.isOrganizer()) {
@@ -27,8 +30,9 @@ import { IconComponent } from '../../shared/ui/icon.component';
         <button [class.on]="scope() === 'past'" (click)="setScope('past')">{{ 'match.past' | t }}</button>
       </div>
 
+      <app-saved-note [at]="savedAt()" />
       @if (loading() && !list()) {
-        @for (i of [1, 2, 3]; track i) { <div class="skeleton mb-3 h-24"></div> }
+        <app-skeleton kind="cards" [count]="3" />
       } @else if (list(); as l) {
         @if (!l.matches.length) {
           <div class="card card-pad text-center muted">{{ 'match.none' | t }}</div>
@@ -117,11 +121,14 @@ export class MatchesPage implements OnInit {
   scope = signal<'upcoming' | 'past'>('upcoming');
   list = signal<MatchList | null>(null);
   loading = signal(true);
+  savedAt = signal<number | null>(null);
   creating = signal(false);
   busy = signal(false);
   recentPlaces = signal<string[]>([]);
   readonly today = todayInput();
   form = { place: '', date: todayInput(), time: '20:00', capacity: 10, mapUrl: '', repeatWeekly: false };
+
+  readonly reload = () => this.load();
 
   ngOnInit() {
     this.load();
@@ -136,11 +143,15 @@ export class MatchesPage implements OnInit {
   }
 
   async load() {
+    const scope = this.scope();
+    const saved = this.api.cached.matches(scope);
+    if (this.api.showNow(saved)) this.list.set(saved.data);
     this.loading.set(true);
     try {
-      this.list.set(await this.api.matches(this.scope()));
+      const fresh = await this.api.matches(scope);
+      if (scope === this.scope()) { this.list.set(fresh); this.savedAt.set(null); }
     } catch (err) {
-      this.ui.error(err);
+      if (saved && scope === this.scope()) { this.list.set(saved.data); this.savedAt.set(saved.at); } else if (!saved) this.ui.error(err);
     } finally {
       this.loading.set(false);
     }

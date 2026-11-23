@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
-import { createHash, randomInt, timingSafeEqual } from 'crypto';
+import { createHash, randomInt, randomUUID, timingSafeEqual } from 'crypto';
 import User from '../models/User.js';
 import Player from '../models/Player.js';
 import { getSettings } from '../models/Settings.js';
@@ -23,7 +23,8 @@ const safeEqual = (a, b) => {
 };
 
 const signAccess = (user) => jwt.sign({ id: String(user._id) }, process.env.JWT_SECRET, { expiresIn: ACCESS_TTL, algorithm: 'HS256' });
-const signRefresh = (user) => jwt.sign({ id: String(user._id) }, process.env.REFRESH_TOKEN_SECRET, { expiresIn: `${REFRESH_TTL_DAYS}d`, algorithm: 'HS256' });
+// jti makes every refresh token unique, even two issued to the same person in the same second.
+const signRefresh = (user) => jwt.sign({ id: String(user._id), jti: randomUUID() }, process.env.REFRESH_TOKEN_SECRET, { expiresIn: `${REFRESH_TTL_DAYS}d`, algorithm: 'HS256' });
 
 // The refresh cookie is only sent to /api/auth, can't be read by JavaScript,
 // and isn't sent from other websites.
@@ -36,18 +37,44 @@ const cookieOptions = () => ({
 });
 
 const MAX_DEVICES = 5;
+const HISTORY_SIZE = 20;
+// Two refreshes with the same cookie this close together are the same browser
+// (two tabs, a retry on a bad signal), not a thief.
+const REUSE_GRACE_MS = 30 * 1000;
 
 /**
- * Issues a new token pair. Only a hash of the refresh token is stored.
- * `replaceHash` is the hash of the token being rotated out (on refresh).
+ * Issues a new token pair after sign-in. Only a hash of the refresh token is stored.
+ * Saves the user document, so callers can change other fields (failed logins, Google id) first.
  */
-const startSession = async (res, user, replaceHash = null) => {
+const startSession = async (res, user) => {
     const refresh = signRefresh(user);
-    const kept = (user.refreshTokenHashes || []).filter(h => h !== replaceHash);
-    user.refreshTokenHashes = [...kept, sha256(refresh)].slice(-MAX_DEVICES);
+    user.refreshTokenHashes = [...(user.refreshTokenHashes || []), sha256(refresh)].slice(-MAX_DEVICES);
     await user.save();
     res.cookie('refreshToken', refresh, cookieOptions());
     return signAccess(user);
+};
+
+/**
+ * Swaps the refresh token `oldHash` for a new one in a single database operation, so two
+ * refreshes arriving together can't both rotate it (or overwrite each other's new token).
+ * Returns the new token, or null if `oldHash` was no longer active.
+ */
+const rotateRefresh = async (user, oldHash) => {
+    const refresh = signRefresh(user);
+    const res = await User.updateOne({ _id: user._id, refreshTokenHashes: oldHash }, [{
+        $set: {
+            refreshTokenHashes: { $slice: [{ $concatArrays: [{ $filter: { input: '$refreshTokenHashes', cond: { $ne: ['$$this', oldHash] } } }, [sha256(refresh)]] }, -MAX_DEVICES] },
+            refreshHistory: { $slice: [{ $concatArrays: [{ $ifNull: ['$refreshHistory', []] }, [{ hash: oldHash, at: '$$NOW' }]] }, -HISTORY_SIZE] }
+        }
+    }], { updatePipeline: true });
+    return res.modifiedCount ? refresh : null;
+};
+
+/** Adds one more refresh token for this person (used for a duplicate refresh inside the grace period). */
+const addRefresh = async (user) => {
+    const refresh = signRefresh(user);
+    await User.updateOne({ _id: user._id }, { $push: { refreshTokenHashes: { $each: [sha256(refresh)], $slice: -MAX_DEVICES } } });
+    return refresh;
 };
 
 const isOrganizerEmail = (email) =>
@@ -149,16 +176,35 @@ export const refresh = async (req, res) => {
         throw httpError(401, 'Not signed in');
     }
     const hash = sha256(token);
-    const user = await User.findById(decoded.id).select('+refreshTokenHashes');
-    if (!user || !user.refreshTokenHashes.some(h => safeEqual(h, hash))) {
-        // A valid but already-used token means it may have been stolen: end every session.
-        if (user) { user.refreshTokenHashes = []; await user.save(); }
+    const user = await User.findById(decoded.id);
+    const signedOut = () => {
         res.clearCookie('refreshToken', { ...cookieOptions(), maxAge: undefined });
-        throw httpError(401, 'Not signed in');
+        return httpError(401, 'Not signed in');
+    };
+    if (!user) throw signedOut();
+
+    // Normal case: this token is active. Swap it for a new one.
+    let next = await rotateRefresh(user, hash);
+
+    if (!next) {
+        // Not active (any more). Why?
+        const fresh = await User.findById(user._id).select('+refreshHistory');
+        const used = fresh.refreshHistory.find(h => safeEqual(h.hash, hash));
+        if (used && Date.now() - new Date(used.at) <= REUSE_GRACE_MS) {
+            // Swapped moments ago by a request from the same browser: give this one its own token too.
+            next = await addRefresh(user);
+        } else if (used) {
+            // An old, already-swapped token came back: someone may have copied it. End every session.
+            await User.updateOne({ _id: user._id }, { $set: { refreshTokenHashes: [], refreshHistory: [] } });
+            throw signedOut();
+        } else {
+            // Signed out, replaced by a 6th device, or ended by a password change: just this device.
+            throw signedOut();
+        }
     }
 
-    const accessToken = await startSession(res, user, hash);
-    res.json({ accessToken, ...(await meView(user, await Player.findOne({ user: user._id }))) });
+    res.cookie('refreshToken', next, cookieOptions());
+    res.json({ accessToken: signAccess(user), ...(await meView(user, await Player.findOne({ user: user._id }))) });
 };
 
 // @route POST /api/auth/logout

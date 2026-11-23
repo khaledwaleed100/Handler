@@ -5,8 +5,8 @@
   </header>
 
   @if (!data()) {
-    <div class="skeleton h-40"></div>
-    <div class="skeleton mt-4 h-72"></div>
+    <div class="skeleton mb-4 h-32 !rounded-[var(--radius)]"></div>
+    <app-skeleton kind="rows" [count]="6" />
   }
 
   @if (data(); as d) {

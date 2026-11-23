@@ -120,6 +120,32 @@ describe('Security basics', () => {
         expect(second.status).toBe(200);
     });
 
+    it('survives two refreshes at once (two tabs), but ends every session when an old token is replayed', async () => {
+        const { default: User } = await import('../models/User.js');
+        const cookieOf = (res) => res.headers['set-cookie'].find(c => c.startsWith('refreshToken=')).split(';')[0];
+        const login = await request(app).post('/api/auth/login').send({ email: people.p2.email, password: PASSWORD });
+        const cookie = cookieOf(login);
+        const refresh = () => request(app).post('/api/auth/refresh').set('Cookie', cookie);
+
+        // Same cookie, same moment: both succeed and each gets a working token.
+        const [a, b] = await Promise.all([refresh(), refresh()]);
+        expect([a.status, b.status]).toEqual([200, 200]);
+        for (const res of [a, b]) {
+            expect((await request(app).post('/api/auth/refresh').set('Cookie', cookieOf(res))).status).toBe(200);
+        }
+
+        // The same token long after it was swapped: treated as stolen, everyone is signed out.
+        await User.updateOne({ email: people.p2.email }, { $set: { 'refreshHistory.$[].at': new Date(Date.now() - 60 * 1000) } });
+        expect((await refresh()).status).toBe(401);
+        expect((await people.p2.agent.post('/api/auth/refresh')).status).toBe(401);
+
+        // A token that was simply signed out ends only its own device, nobody else's.
+        const mine = cookieOf(await request(app).post('/api/auth/login').send({ email: people.p3.email, password: PASSWORD }));
+        await request(app).post('/api/auth/logout').set('Cookie', mine);
+        expect((await request(app).post('/api/auth/refresh').set('Cookie', mine)).status).toBe(401);
+        expect((await people.p3.agent.post('/api/auth/refresh')).status).toBe(200);
+    });
+
     it('cannot promote yourself to organizer through the profile', async () => {
         await request(app).put('/api/me').set(auth('p1')).send({ role: 'organizer', name: 'p1' });
         const me = await request(app).get('/api/me').set(auth('p1'));

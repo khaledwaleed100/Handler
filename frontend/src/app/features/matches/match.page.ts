@@ -11,13 +11,15 @@ import { RsvpCardComponent } from '../../shared/ui/rsvp-card.component';
 import { PitchComponent } from '../../shared/ui/pitch.component';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { AvatarComponent } from '../../shared/ui/avatar.component';
+import { SkeletonComponent } from '../../shared/ui/skeleton.component';
+import { CountUpDirective } from '../../shared/ui/count-up.directive';
 
 type Tab = 'players' | 'teams' | 'checkin' | 'result';
 
 @Component({
   selector: 'app-match',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgClass, NgTemplateOutlet, FormsModule, RouterLink, TPipe, RsvpCardComponent, PitchComponent, IconComponent, AvatarComponent],
+  imports: [NgClass, NgTemplateOutlet, FormsModule, RouterLink, TPipe, RsvpCardComponent, PitchComponent, IconComponent, AvatarComponent, SkeletonComponent, CountUpDirective],
   templateUrl: './match.page.html'
 })
 export class MatchPage implements OnInit {
@@ -109,6 +111,8 @@ export class MatchPage implements OnInit {
 
   async load() {
     this.loading.set(true);
+    const saved = this.api.cached.match(this.id());
+    if (this.api.showNow(saved)) this.setMatch(saved.data);
     try {
       const m = await this.api.match(this.id());
       this.setMatch(m);
@@ -119,7 +123,7 @@ export class MatchPage implements OnInit {
         this.api.favorites().then(ids => this.favorites.set(new Set(ids))).catch(() => {});
       }
     } catch (err) {
-      this.ui.error(err);
+      if (saved) { if (!this.match()) this.setMatch(saved.data); } else this.ui.error(err);
     } finally {
       this.loading.set(false);
     }
@@ -127,6 +131,7 @@ export class MatchPage implements OnInit {
 
   private setMatch(m: MatchWithPlayers) {
     this.match.set(m);
+    this.api.remember.match(m);
     if (!this.dirty()) {
       this.draftA.set(m.teamA);
       this.draftB.set(m.teamB);
@@ -155,6 +160,10 @@ export class MatchPage implements OnInit {
   }
 
   // ── Players tab ──────────────────────────────────────
+  onRsvp(m: MatchWithPlayers) {
+    this.match.set(m);
+    this.api.remember.match(m);
+  }
   setStatus(playerId: string, status: RsvpStatus | 'remove') {
     this.run(() => this.api.setRoster(this.id(), playerId, status));
   }

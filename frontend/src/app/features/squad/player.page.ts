@@ -7,11 +7,12 @@ import { PlayerProfile } from '../../core/models';
 import { Ui } from '../../core/ui.service';
 import { PlayerCardComponent } from '../../shared/ui/player-card.component';
 import { IconComponent } from '../../shared/ui/icon.component';
+import { SkeletonComponent } from '../../shared/ui/skeleton.component';
 
 @Component({
   selector: 'app-player',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgClass, RouterLink, TPipe, PlayerCardComponent, IconComponent],
+  imports: [NgClass, RouterLink, TPipe, PlayerCardComponent, IconComponent, SkeletonComponent],
   template: `
     <div class="page">
       <header class="mb-4 flex items-center gap-2">
@@ -41,7 +42,9 @@ import { IconComponent } from '../../shared/ui/icon.component';
           }
         </div>
       } @else {
-        <div class="skeleton h-80"></div>
+        <app-skeleton kind="profile" />
+        <div class="skeleton mb-2 mt-6 h-3 w-24"></div>
+        <app-skeleton kind="rows" [count]="3" />
       }
     </div>`
 })
@@ -53,6 +56,8 @@ export class PlayerPage implements OnInit {
   profile = signal<PlayerProfile | null>(null);
 
   async ngOnInit() {
-    try { this.profile.set(await this.api.player(this.id())); } catch (err) { this.ui.error(err); }
+    const saved = this.api.cached.player(this.id());
+    if (this.api.showNow(saved)) this.profile.set(saved.data);
+    try { this.profile.set(await this.api.player(this.id())); } catch (err) { if (saved) this.profile.set(saved.data); else this.ui.error(err); }
   }
 }

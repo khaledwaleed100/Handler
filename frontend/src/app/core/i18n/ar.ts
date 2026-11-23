@@ -2,7 +2,7 @@ import { Dict } from './en';
 
 /** Arabic strings. Must have exactly the same keys as en.ts (TypeScript checks this). */
 export const ar: Dict = {
-  app: { name: 'The Handler', waking: 'جارٍ تشغيل السيرفر…', offline: 'أنت غير متصل بالإنترنت', retry: 'حاول مرة أخرى', loading: 'جارٍ التحميل…', save: 'حفظ', saved: 'تم الحفظ', cancel: 'إلغاء', close: 'إغلاق', back: 'رجوع', next: 'التالي', done: 'تم', delete: 'حذف', edit: 'تعديل', yes: 'نعم', no: 'لا', or: 'أو', optional: 'اختياري', copy: 'نسخ', copied: 'تم النسخ', share: 'مشاركة', error: 'حدث خطأ ما', confirm: 'هل أنت متأكد؟' },
+  app: { name: 'The Handler', waking: 'جارٍ تشغيل السيرفر…', offline: 'أنت غير متصل بالإنترنت', retry: 'حاول مرة أخرى', loading: 'جارٍ التحميل…', save: 'حفظ', saved: 'تم الحفظ', cancel: 'إلغاء', close: 'إغلاق', back: 'رجوع', next: 'التالي', done: 'تم', delete: 'حذف', edit: 'تعديل', yes: 'نعم', no: 'لا', or: 'أو', optional: 'اختياري', copy: 'نسخ', copied: 'تم النسخ', share: 'مشاركة', error: 'حدث خطأ ما', confirm: 'هل أنت متأكد؟', savedCopy: 'غير متصل · تعرض ما شاهدته منذ {t}', savedCopyRecent: 'غير متصل · تعرض آخر نسخة محفوظة' },
   nav: { home: 'الرئيسية', matches: 'الماتشات', squad: 'اللاعبين', vote: 'التصويت', me: 'حسابي', organizer: 'المنظم' },
   pos: { GK: 'حارس مرمى', DEF: 'مدافع', MID: 'وسط', FWD: 'مهاجم', short_GK: 'حارس', short_DEF: 'دفاع', short_MID: 'وسط', short_FWD: 'هجوم' },
   attr: { pace: 'السرعة', attack: 'الهجوم', passing: 'التمرير', defence: 'الدفاع', physical: 'القوة البدنية', goalkeeping: 'حراسة المرمى', short_pace: 'سرعة', short_attack: 'هجوم', short_passing: 'تمرير', short_defence: 'دفاع', short_physical: 'قوة', short_goalkeeping: 'حراسة' },

@@ -11,8 +11,9 @@
   </header>
 
   @if (loading() && !match()) {
-    <div class="skeleton h-64"></div>
-    <div class="skeleton mt-4 h-96"></div>
+    <app-skeleton kind="match" />
+    <div class="skeleton mb-2 mt-6 h-3 w-24"></div>
+    <app-skeleton kind="rows" [count]="5" />
   }
 
   @if (match(); as m) {
@@ -26,7 +27,7 @@
 
     <!-- ── Upcoming: reply card ──────────────────── -->
     @if (m.status === 'upcoming') {
-      <app-rsvp-card [match]="m" [showLink]="false" (changed)="match.set($event)" />
+      <app-rsvp-card [match]="m" [showLink]="false" (changed)="onRsvp($event)" />
     }
 
     <!-- ── Completed: scoreboard ─────────────────── -->
@@ -36,7 +37,7 @@
           <div class="text-xs font-bold uppercase tracking-wider opacity-70">{{ 'match.completed' | t }} · {{ i18n.date(m.kickoff, { day: 'numeric', month: 'short' }) }}</div>
           <div class="mt-2 flex items-center justify-center gap-5" dir="ltr">
             <div class="flex-1 text-end"><div class="text-xs font-bold" style="color: var(--team-a)">{{ 'match.teamA' | t }}</div></div>
-            <div class="text-5xl font-black num pop">{{ m.score.a }}<span class="mx-2 opacity-50">–</span>{{ m.score.b }}</div>
+            <div class="text-5xl font-black num pop"><span [countUp]="m.score.a"></span><span class="mx-2 opacity-50">–</span><span [countUp]="m.score.b"></span></div>
             <div class="flex-1 text-start"><div class="text-xs font-bold" style="color: var(--team-b)">{{ 'match.teamB' | t }}</div></div>
           </div>
           @if (m.mvp) {

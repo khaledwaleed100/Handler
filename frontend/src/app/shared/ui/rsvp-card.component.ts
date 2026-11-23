@@ -9,6 +9,7 @@ import { Ui } from '../../core/ui.service';
 import { Forecast, WeatherService } from '../../core/services/weather.service';
 import { googleCalendarLink, mapLink } from '../../core/util';
 import { IconComponent } from './icon.component';
+import { celebrate } from '../../core/celebrate';
 
 /** The "next match" card: when, where, weather, how many are in, and big In / Out / Maybe buttons. */
 @Component({
@@ -59,7 +60,7 @@ import { IconComponent } from './icon.component';
             @for (o of options; track o.status) {
               <button class="btn !px-2 text-sm" [disabled]="busy()"
                       [ngClass]="m.myRsvp === o.status ? o.on : 'btn-ghost'"
-                      (click)="reply(o.status)">{{ o.label | t }}</button>
+                      (click)="reply(o.status, $event)">{{ o.label | t }}</button>
             }
           </div>
         }
@@ -110,17 +111,44 @@ export class RsvpCardComponent implements OnInit {
     this.weather.set(await this.weatherService.forecastAt(this.match().kickoff));
   }
 
-  async reply(status: RsvpStatus) {
-    if (this.match().myRsvp === status) return;
+  async reply(status: RsvpStatus, event?: Event) {
+    const before = this.match();
+    if (before.myRsvp === status) return;
     this.busy.set(true);
     this.ui.haptic();
+    // Show the answer at once; the server's version replaces it (or it's undone on failure).
+    const guess = this.withReply(before, status);
+    this.changed.emit(guess);
+    if (guess.myPlace === 'confirmed') {
+      const r = (event?.currentTarget as HTMLElement | undefined)?.getBoundingClientRect();
+      if (r) celebrate({ x: r.left + r.width / 2, y: r.top });
+    }
     try {
-      this.changed.emit(await this.api.rsvp(this.match()._id, status));
+      this.changed.emit(await this.api.rsvp(before._id, status));
     } catch (err) {
+      this.changed.emit(before);
       this.ui.error(err);
     } finally {
       this.busy.set(false);
     }
+  }
+
+  /** Best guess of the lists after my reply, using the same rules as the server (first come, first in). */
+  private withReply(m: MatchWithPlayers, status: RsvpStatus): MatchWithPlayers {
+    const me = this.auth.player()?._id;
+    if (!me) return { ...m, myRsvp: status };
+    const without = (ids: string[]) => ids.filter(id => id !== me);
+    const lists = { confirmed: without(m.rsvp.confirmed), waitlist: without(m.rsvp.waitlist), maybe: without(m.rsvp.maybe), out: without(m.rsvp.out) };
+    // Leaving frees a spot for the first person waiting.
+    if (m.rsvp.confirmed.includes(me) && lists.waitlist.length) lists.confirmed.push(lists.waitlist.shift()!);
+    let myPlace: MatchWithPlayers['myPlace'] = null;
+    if (status === 'in') {
+      myPlace = lists.confirmed.length < m.capacity ? 'confirmed' : 'waitlist';
+      lists[myPlace].push(me);
+    } else {
+      lists[status].push(me);
+    }
+    return { ...m, rsvp: lists, myRsvp: status, myPlace };
   }
 
   calendarUrl = computed(() => googleCalendarLink(this.match(), `⚽ The Handler · ${this.match().place}`));

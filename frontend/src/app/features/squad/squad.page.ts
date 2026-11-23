@@ -6,15 +6,19 @@ import { TPipe } from '../../core/i18n/i18n.service';
 import { POSITIONS, Position, PublicPlayer } from '../../core/models';
 import { Ui } from '../../core/ui.service';
 import { PlayerCardComponent } from '../../shared/ui/player-card.component';
+import { SavedNoteComponent } from '../../shared/ui/saved-note.component';
+import { SkeletonComponent } from '../../shared/ui/skeleton.component';
+import { PullToRefreshDirective } from '../../shared/ui/pull-to-refresh.directive';
 
 @Component({
   selector: 'app-squad',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, RouterLink, TPipe, PlayerCardComponent],
+  imports: [FormsModule, RouterLink, TPipe, PlayerCardComponent, SavedNoteComponent, SkeletonComponent, PullToRefreshDirective],
   template: `
-    <div class="page">
+    <div class="page" [pullToRefresh]="reload">
       <h1 class="page-title mb-4">{{ 'squad.title' | t }} <span class="muted text-lg">{{ players().length || '' }}</span></h1>
 
+      <app-saved-note [at]="savedAt()" />
       <input class="input mb-3" type="search" [placeholder]="'squad.search' | t" [ngModel]="query()" (ngModelChange)="query.set($event)" />
 
       <div class="seg mb-2">
@@ -29,8 +33,8 @@ import { PlayerCardComponent } from '../../shared/ui/player-card.component';
         }
       </div>
 
-      @if (loading()) {
-        @for (i of [1, 2, 3, 4, 5]; track i) { <div class="skeleton mb-2 h-16"></div> }
+      @if (loading() && !players().length) {
+        <app-skeleton kind="rows" [count]="6" />
       } @else {
         <div class="card px-4">
           @for (p of shown(); track p._id) {
@@ -56,6 +60,7 @@ export class SquadPage implements OnInit {
 
   players = signal<PublicPlayer[]>([]);
   loading = signal(true);
+  savedAt = signal<number | null>(null);
   query = signal('');
   pos = signal<Position | null>(null);
   sort = signal<'overall' | 'goals' | 'name'>('overall');
@@ -68,7 +73,21 @@ export class SquadPage implements OnInit {
       by === 'name' ? a.name.localeCompare(b.name) : by === 'goals' ? b.stats.goals - a.stats.goals || b.overall - a.overall : b.overall - a.overall);
   });
 
-  async ngOnInit() {
-    try { this.players.set(await this.api.players()); } catch (err) { this.ui.error(err); } finally { this.loading.set(false); }
+  readonly reload = () => this.load();
+
+  ngOnInit() {
+    this.load();
+  }
+
+  async load() {
+    const saved = this.api.cached.players();
+    if (this.api.showNow(saved)) this.players.set(saved.data);
+    try {
+      this.players.set(await this.api.players());
+    } catch (err) {
+      if (saved) { this.players.set(saved.data); this.savedAt.set(saved.at); } else this.ui.error(err);
+    } finally {
+      this.loading.set(false);
+    }
   }
 }

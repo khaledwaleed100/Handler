@@ -48,6 +48,9 @@ const userSchema = new mongoose.Schema({
 
     // Hashes of active refresh tokens, one per signed-in device (max 5).
     refreshTokenHashes: { type: [String], default: [], select: false },
+    // Refresh tokens already swapped for new ones (newest last). Lets a duplicate refresh within a
+    // few seconds succeed, and tells a replayed old token (possible theft) from a merely expired one.
+    refreshHistory: { type: [{ hash: String, at: Date, _id: false }], default: [], select: false },
     resetCodeHash: { type: String, select: false },
     resetCodeExpires: { type: Date, select: false },
     resetAttempts: { type: Number, default: 0, select: false },

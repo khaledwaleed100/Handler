@@ -9,11 +9,16 @@
     var lang = localStorage.getItem('lang') || ((navigator.language || '').indexOf('ar') === 0 ? 'ar' : 'en');
     document.documentElement.lang = lang;
     document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
-    if (lang === 'ar') {
-      document.addEventListener('DOMContentLoaded', function () {
-        var t = document.getElementById('splash-text');
-        if (t) t.textContent = 'جارٍ تشغيل السيرفر… قد يستغرق دقيقة.';
+    // Loading screen messages: say what's happening as the wait gets longer.
+    var steps = lang === 'ar'
+      ? [[4000, 'جارٍ تشغيل السيرفر…'], [15000, 'السيرفر المجاني بيصحى بعد الخمول، لحظات…'], [35000, 'قربنا خلاص…']]
+      : [[4000, 'Waking the server up…'], [15000, 'Free servers nap when nobody uses them. Nearly awake…'], [35000, 'Almost there…']];
+    document.addEventListener('DOMContentLoaded', function () {
+      var t = document.getElementById('splash-text');
+      if (!t) return;
+      steps.forEach(function (s) {
+        setTimeout(function () { t.textContent = s[1]; t.className = 'on'; }, s[0]);
       });
-    }
+    });
   } catch (e) { /* storage blocked */ }
 })();
